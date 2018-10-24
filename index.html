@@ -8,10 +8,61 @@
 	</head>
 	
 	
+	<style>
+		html, body
+		{
+			margin: 0;
+			padding: 0;
+			width: 100vw;
+			height: 100vh;
+		}
+		
+		
+		#divLayout
+		{
+			display: grid;
+			padding: 1em;
+			width: calc(100vw - 2em);
+			height: calc(100vh - 2em);
+			max-width: calc(100vw - 2em);
+			max-height: calc(100vh - 2em);
+			grid-template-columns: 1fr;
+			grid-template-rows: auto 1fr;
+		}
+		
+		
+		#divGlyphList
+		{
+			border: 1px solid gray;
+			background-color: #ddd;
+			overflow: auto;
+		}
+		
+		
+		.glyphListItem
+		{
+			display: inline-block;
+			width: 100px;
+			height: 100px;
+			margin: 0.25vw;
+			background-color: white;
+		}
+	</style>
+	
+	
 	<body>
-		<input id="inputFile" type="file"></input>
-		<br>
-		Check the Console for output!
+		<div id="divLayout">
+			<div style="grid-row:1; grid-column:1;">
+				<input id="inputFile" type="file"></input>
+				<br>
+				<br>
+				Check the Console for extra output!
+				<br>
+				<br>
+			</div>
+			
+			<div id="divGlyphList" style="grid-row:2; grid-column:1;"></div>
+		</div>
 		
 		<script type="module" src="src/main.js"></script>
 	</body>

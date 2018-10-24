@@ -33,11 +33,11 @@ export class ByteReader
 		if ((x & 0x80) == 0)
 			return x
 		
-		return -((~x) + 1)
+		return -(0x100 - x)
 	}
 	
 	
-	readBytes(length)
+	readManyBytes(length)
 	{
 		let arr = []
 		for (let i = 0; i < length; i++)
@@ -101,6 +101,16 @@ export class ByteReader
 	}
 	
 	
+	readManyUInt32BE(length)
+	{
+		let arr = []
+		for (let i = 0; i < length; i++)
+			arr.push(this.readUInt32BE())
+		
+		return arr
+	}
+	
+	
 	readUInt32LE()
 	{
 		let b3 = this.readByte()
@@ -143,7 +153,7 @@ export class ByteReader
 		if ((x & 0x8000) == 0)
 			return x
 		
-		return -((~x) + 1)
+		return -(0x10000 - x)
 	}
 	
 	
@@ -153,7 +163,7 @@ export class ByteReader
 		if ((x & 0x80000000) == 0)
 			return x
 		
-		return -((~x) + 1)
+		return -(0x100000000 - x)
 	}
 	
 	

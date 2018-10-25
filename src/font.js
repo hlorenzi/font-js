@@ -342,14 +342,12 @@ export class Font
 			if ((component.flags & WE_HAVE_A_SCALE_FLAG) != 0)
 			{
 				component.xScale = component.yScale = this.readF2Dot14(r)
-				this.warnings.push("glyph 0x" + glyphId.toString(16) + ": unsupported WE_HAVE_A_SCALE flag")
 			}
 			
 			else if ((component.flags & WE_HAVE_AN_X_AND_Y_SCALE_FLAG) != 0)
 			{
 				component.xScale = this.readF2Dot14(r)
 				component.yScale = this.readF2Dot14(r)
-				this.warnings.push("glyph 0x" + glyphId.toString(16) + ": unsupported WE_HAVE_AN_X_AND_Y_SCALE flag")
 			}
 			
 			else if ((component.flags & WE_HAVE_A_TWO_BY_TWO_FLAG) != 0)
@@ -358,7 +356,6 @@ export class Font
 				component.scale01 = this.readF2Dot14(r)
 				component.scale10 = this.readF2Dot14(r)
 				component.yScale  = this.readF2Dot14(r)
-				this.warnings.push("glyph 0x" + glyphId.toString(16) + ": unsupported WE_HAVE_A_TWO_BY_TWO flag")
 			}
 			
 			if ((component.flags & MORE_COMPONENTS_FLAG) == 0)
@@ -375,7 +372,15 @@ export class Font
 	
 	readF2Dot14(r)
 	{
-		return r.readUInt16BE()
+		const raw = r.readUInt16BE()
+		
+		const rawIntegerPart = (raw & 0xc000) >> 14
+		const rawFractionalPart = (raw & 0x3fff)
+		
+		const integerPart = (rawIntegerPart & 0x2) ? (2 - rawIntegerPart) : rawIntegerPart
+		const fractionalPart = rawFractionalPart / 16384
+		
+		return integerPart + fractionalPart
 	}
 	
 	
@@ -480,9 +485,6 @@ export class Font
 		else
 		{
 			const ARGS_ARE_XY_VALUES_FLAG = 0x0002
-			const WE_HAVE_A_SCALE_FLAG = 0x0008
-			const WE_HAVE_AN_X_AND_Y_SCALE_FLAG = 0x0040
-			const WE_HAVE_A_TWO_BY_TWO_FLAG = 0x0080
 			
 			for (const component of glyph.components)
 			{
@@ -490,10 +492,7 @@ export class Font
 				if (componentGeometry == null)
 					continue
 				
-				if ((component.flags & ARGS_ARE_XY_VALUES_FLAG) == 0 ||
-					(component.flags & WE_HAVE_A_SCALE_FLAG) != 0 ||
-					(component.flags & WE_HAVE_AN_X_AND_Y_SCALE_FLAG) != 0 ||
-					(component.flags & WE_HAVE_A_TWO_BY_TWO_FLAG) != 0)
+				if ((component.flags & ARGS_ARE_XY_VALUES_FLAG) == 0)
 					return null
 					
 				const xOffset =  scale * component.argument1
@@ -503,6 +502,18 @@ export class Font
 				{
 					for (const segment of contour)
 					{
+						// FIXME: scale01 and scale10 not being used correctly?
+						segment.x1 = (segment.x1 * component.xScale) + (segment.y1 * component.scale01)
+						segment.y1 = (segment.y1 * component.yScale) + (segment.x1 * component.scale10)
+						segment.x2 = (segment.x2 * component.xScale) + (segment.y2 * component.scale01)
+						segment.y2 = (segment.y2 * component.yScale) + (segment.x2 * component.scale10)
+						
+						if (segment.kind == "qbezier")
+						{
+							segment.x3 = (segment.x3 * component.xScale) + (segment.y3 * component.scale01)
+							segment.y3 = (segment.y3 * component.yScale) + (segment.x3 * component.scale10)
+						}
+						
 						segment.x1 += xOffset
 						segment.y1 += yOffset
 						segment.x2 += xOffset

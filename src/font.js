@@ -28,6 +28,14 @@ export class Font
 	}
 	
 	
+	getGlyphCount()
+	{
+		const glyfTable = this.getTable("glyf")
+		
+		return glyfTable.glyphs.length
+	}
+	
+	
 	warnIf(condition, message)
 	{
 		if (condition)

@@ -2,6 +2,9 @@ import { ByteReader } from "./byteReader.js"
 import { Font } from "./font.js"
 
 
+let gFont = null
+
+
 const inputFile = document.getElementById("inputFile")
 inputFile.onchange = () =>
 {
@@ -11,66 +14,100 @@ inputFile.onchange = () =>
 	reader.readAsArrayBuffer(inputFile.files[0])
 }
 
+document.getElementById("checkboxDrawMetrics").onchange = () => refresh()
+
 
 function loadFont(buffer)
 {
 	let r = new ByteReader(buffer)
-	let font = Font.fromReader(r)
+	gFont = Font.fromReader(r)
 	
-	for (const warning of font.warnings)
+	for (const warning of gFont.warnings)
 		console.warn(warning)
 	
-	console.log(font)
-	
+	console.log(gFont)
+	refresh()
+}
+
+
+function refresh()
+{
+	buildGlyphList()
+}
+
+
+function buildGlyphList()
+{
 	let divGlyphList = document.getElementById("divGlyphList")
 	while (divGlyphList.firstChild)
 		divGlyphList.removeChild(divGlyphList.firstChild)
 	
-	for (const glyphId of font.enumerateGlyphIds())
+	if (gFont == null)
+		return
+	
+	const drawMetrics = document.getElementById("checkboxDrawMetrics").checked
+	
+	const glyphCount = gFont.getGlyphCount()
+	for (let glyphId = 0; glyphId < glyphCount; glyphId++)
 	{
 		let glyphListItem = document.createElement("div")
 		glyphListItem.className = "glyphListItem"
+		
+		let glyphListItemLabel = document.createElement("div")
+		glyphListItemLabel.className = "glyphListItemLabel"
+		glyphListItemLabel.innerHTML = glyphId.toString(16)
 		
 		let glyphListItemCanvas = document.createElement("canvas")
 		glyphListItemCanvas.className = "glyphListItemCanvas"
 		glyphListItemCanvas.width = "100"
 		glyphListItemCanvas.height = "100"
 		
+		glyphListItem.appendChild(glyphListItemLabel)
 		glyphListItem.appendChild(glyphListItemCanvas)
 		divGlyphList.appendChild(glyphListItem)
 		
 		glyphListItem.onclick = () =>
 		{
 			console.log("Internal data for glyph 0x" + glyphId.toString(16) + ":")
-			console.log(font.getGlyphData(glyphId))
+			console.log(gFont.getGlyphData(glyphId))
 		}
 		
 		let ctx = glyphListItemCanvas.getContext("2d")
-		ctx.translate(50, 50)
-		ctx.scale(90, 90)
 		
-		let geometry = font.getGlyphGeometry(glyphId)
-		if (geometry != null)
-		{
-			ctx.translate(-(geometry.xMax + geometry.xMin) / 2, -(geometry.yMax + geometry.yMin) / 2)
-			renderGlyphGeometry(ctx, geometry)
-		}
-		else
-		{
-			ctx.fillStyle = "#fee"
-			ctx.fillRect(-100, -100, 200, 200)
-		}
+		let geometry = gFont.getGlyphGeometry(glyphId)
+		renderGlyphGeometry(ctx, geometry, drawMetrics)
 	}
 }
 
 
-function renderGlyphGeometry(ctx, geometry)
+function renderGlyphGeometry(ctx, geometry, drawMetrics)
 {
-	ctx.fillStyle = geometry.isComposite ? "#f8eeff" : "#fff"
+	ctx.fillStyle = (geometry == null ? "#fee" : geometry.isComposite ? "#f8eeff" : "#fff")
 	ctx.fillRect(-100, -100, 200, 200)
+	
+	if (geometry == null)
+		return
 	
 	ctx.fillStyle = "#000"
 	ctx.beginPath()
+	
+	const scale = 90
+	
+	ctx.translate(50, 50)
+	ctx.scale(scale, scale)
+	ctx.translate(-(geometry.xMax + geometry.xMin) / 2, -(geometry.yMax + geometry.yMin) / 2)
+	
+	if (drawMetrics)
+	{
+		ctx.strokeStyle = "#080"
+		ctx.lineWidth = 1 / scale
+		ctx.beginPath()
+		ctx.moveTo(-1000, 0)
+		ctx.lineTo( 1000, 0)
+		ctx.moveTo(0, -1000)
+		ctx.lineTo(0,  1000)
+		ctx.stroke()
+	}
 	
 	for (const contour of geometry.contours)
 	{

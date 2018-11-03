@@ -12,7 +12,9 @@ export class Font
 		font.readOffsetTable(r)
 		font.readTableRecord(r)
 		font.readFontHeaderTable(r)
+		font.readHorizontalHeaderTable(r)
 		font.readMaximumProfileTable(r)
+		font.readHorizontalMetricsTable(r)
 		font.readIndexToLocationTable(r)
 		font.readGlyphDataTable(r)
 		return font
@@ -33,6 +35,19 @@ export class Font
 		const glyfTable = this.getTable("glyf")
 		
 		return glyfTable.glyphs.length
+	}
+	
+	
+	getHorizontalLineMetrics()
+	{
+		const headTable = this.getTable("head")
+		const hheaTable = this.getTable("hhea")
+		
+		return {
+			lineTop:    -hheaTable.ascender  / headTable.unitsPerEm,
+			lineBottom: -hheaTable.descender / headTable.unitsPerEm,
+			lineGap:     hheaTable.lineGap   / headTable.unitsPerEm
+		}
 	}
 	
 	
@@ -117,6 +132,63 @@ export class Font
 		
 		if (table.indexToLocFormat != 0 && table.indexToLocFormat != 1)
 			throw "invalid `head` indexToLocFormat"
+	}
+	
+	
+	readHorizontalHeaderTable(r)
+	{
+		let table = this.getTable("hhea")
+		
+		r.seek(table.offset)
+		
+		table.majorVersion = r.readUInt16BE()
+		table.minorVersion = r.readUInt16BE()
+		
+		table.ascender  = r.readInt16BE()
+		table.descender = r.readInt16BE()
+		table.lineGap   = r.readInt16BE()
+		
+		table.advanceWidthMax = r.readUInt16BE()
+		
+		table.minLeftSideBearing  = r.readInt16BE()
+		table.minRightSideBearing = r.readInt16BE()
+		
+		table.xMaxExtent = r.readInt16BE()
+		
+		table.caretSlopeRise = r.readInt16BE()
+		table.caretSlopeRun = r.readInt16BE()
+		table.caretOffset = r.readInt16BE()
+		
+		table.reserved0 = r.readInt16BE()
+		table.reserved1 = r.readInt16BE()
+		table.reserved2 = r.readInt16BE()
+		table.reserved3 = r.readInt16BE()
+		
+		table.metricDataFormat = r.readInt16BE()
+		
+		table.numberOfHMetrics = r.readUInt16BE()
+	}
+	
+	
+	readHorizontalMetricsTable(r)
+	{
+		const hhea = this.getTable("hhea")
+		const maxp = this.getTable("maxp")
+		let   hmtx = this.getTable("hmtx")
+		
+		r.seek(hmtx.offset)
+		
+		hmtx.hMetrics = []
+		for (let i = 0; i < hhea.numberOfHMetrics; i++)
+		{
+			let hMetric = { }
+			hMetric.advanceWidth = r.readUInt16BE()
+			hMetric.lsb = r.readInt16BE()
+			
+			hmtx.hMetrics.push(hMetric)
+		}
+		
+		hmtx.leftSideBearings = r.readManyInt16BE(maxp.numGlyphs - hhea.numberOfHMetrics)
 	}
 	
 	
@@ -403,6 +475,7 @@ export class Font
 	getGlyphGeometry(glyphId)
 	{
 		const headTable = this.getTable("head")
+		const hmtxTable = this.getTable("hmtx")
 		const glyfTable = this.getTable("glyf")
 		const glyph = glyfTable.glyphs[glyphId]
 		
@@ -416,6 +489,14 @@ export class Font
 		geometry.yMin = null
 		geometry.xMax = null
 		geometry.yMax = null
+		
+		let hMetric = null
+		if (glyphId >= hmtxTable.hMetrics.length)
+			hMetric = hmtxTable.hMetrics[hmtxTable.hMetrics.length - 1]
+		else
+			hMetric = hmtxTable.hMetrics[glyphId]
+		
+		geometry.advance = hMetric.advanceWidth / headTable.unitsPerEm
 		
 		let updateMeasures = (x, y) =>
 		{

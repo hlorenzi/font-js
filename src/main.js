@@ -46,6 +46,7 @@ function buildGlyphList()
 		return
 	
 	const drawMetrics = document.getElementById("checkboxDrawMetrics").checked
+	const lineMetrics = gFont.getHorizontalLineMetrics()
 	
 	const glyphCount = gFont.getGlyphCount()
 	for (let glyphId = 0; glyphId < glyphCount; glyphId++)
@@ -70,17 +71,18 @@ function buildGlyphList()
 		{
 			console.log("Internal data for glyph 0x" + glyphId.toString(16) + ":")
 			console.log(gFont.getGlyphData(glyphId))
+			console.log(gFont.getGlyphGeometry(glyphId))
 		}
 		
 		let ctx = glyphListItemCanvas.getContext("2d")
 		
 		let geometry = gFont.getGlyphGeometry(glyphId)
-		renderGlyphGeometry(ctx, geometry, drawMetrics)
+		renderGlyphGeometry(ctx, geometry, lineMetrics, drawMetrics)
 	}
 }
 
 
-function renderGlyphGeometry(ctx, geometry, drawMetrics)
+function renderGlyphGeometry(ctx, geometry, lineMetrics, drawMetrics)
 {
 	ctx.fillStyle = (geometry == null ? "#fee" : geometry.isComposite ? "#f8eeff" : "#fff")
 	ctx.fillRect(-100, -100, 200, 200)
@@ -88,26 +90,41 @@ function renderGlyphGeometry(ctx, geometry, drawMetrics)
 	if (geometry == null)
 		return
 	
-	ctx.fillStyle = "#000"
-	ctx.beginPath()
-	
-	const scale = 90
+	const scale = 1 / (lineMetrics.lineBottom - lineMetrics.lineTop) * 90
 	
 	ctx.translate(50, 50)
 	ctx.scale(scale, scale)
-	ctx.translate(-(geometry.xMax + geometry.xMin) / 2, -(geometry.yMax + geometry.yMin) / 2)
+	
+	if (drawMetrics)
+		ctx.translate(-geometry.advance / 2, -(lineMetrics.lineTop + lineMetrics.lineBottom) / 2)
+	else
+		ctx.translate(-(geometry.xMax + geometry.xMin) / 2, -(geometry.yMax + geometry.yMin) / 2)
 	
 	if (drawMetrics)
 	{
-		ctx.strokeStyle = "#080"
+		ctx.fillStyle = "#fb8"
+		ctx.fillRect(-1000, -1000, 2000, lineMetrics.lineTop + 1000)
+		ctx.fillRect(-1000, lineMetrics.lineBottom, 2000, 1000)
+		
 		ctx.lineWidth = 1 / scale
+		
+		ctx.strokeStyle = "#080"
 		ctx.beginPath()
 		ctx.moveTo(-1000, 0)
 		ctx.lineTo( 1000, 0)
 		ctx.moveTo(0, -1000)
 		ctx.lineTo(0,  1000)
 		ctx.stroke()
+		
+		ctx.strokeStyle = "#00f"
+		ctx.beginPath()
+		ctx.moveTo(geometry.advance, -1000)
+		ctx.lineTo(geometry.advance,  1000)
+		ctx.stroke()
 	}
+	
+	ctx.fillStyle = "#000"
+	ctx.beginPath()
 	
 	for (const contour of geometry.contours)
 	{

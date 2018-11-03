@@ -157,6 +157,16 @@ export class ByteReader
 	}
 	
 	
+	readManyInt16BE(length)
+	{
+		let arr = []
+		for (let i = 0; i < length; i++)
+			arr.push(this.readInt16BE())
+		
+		return arr
+	}
+	
+	
 	readInt32BE()
 	{
 		let x = this.readUInt32BE()

@@ -13,6 +13,12 @@ export class ByteReader
 	}
 	
 	
+	getPosition()
+	{
+		return this.head
+	}
+	
+	
 	seek(index)
 	{
 		this.head = index

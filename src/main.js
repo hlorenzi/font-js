@@ -20,7 +20,13 @@ document.getElementById("checkboxDrawMetrics").onchange = () => refresh()
 function loadFont(buffer)
 {
 	let r = new ByteReader(buffer)
-	gFont = Font.fromReader(r)
+	
+	try { gFont = Font.fromReader(r) }
+	catch (e)
+	{
+		window.alert("Error loading font!")
+		throw e
+	}
 	
 	for (const warning of gFont.warnings)
 		console.warn(warning)
@@ -45,6 +51,14 @@ function buildGlyphList()
 	if (gFont == null)
 		return
 	
+	const unicodeMap = gFont.getUnicodeMap()
+	let glyphToUnicodeMap = new Map()
+	for (const [code, glyphId] of unicodeMap)
+	{
+		if (!glyphToUnicodeMap.has(glyphId))
+			glyphToUnicodeMap.set(glyphId, code)
+	}
+	
 	const drawMetrics = document.getElementById("checkboxDrawMetrics").checked
 	const lineMetrics = gFont.getHorizontalLineMetrics()
 	
@@ -54,9 +68,14 @@ function buildGlyphList()
 		let glyphListItem = document.createElement("div")
 		glyphListItem.className = "glyphListItem"
 		
+		const unicodeIndex = glyphToUnicodeMap.get(glyphId)
+		const glyphLabel =
+			"#" + glyphId.toString() +
+			" (U+" + (unicodeIndex == null ? "????" : unicodeIndex.toString(16).padStart(4, "0")) + ")"
+		
 		let glyphListItemLabel = document.createElement("div")
 		glyphListItemLabel.className = "glyphListItemLabel"
-		glyphListItemLabel.innerHTML = glyphId.toString(16)
+		glyphListItemLabel.innerHTML = glyphLabel
 		
 		let glyphListItemCanvas = document.createElement("canvas")
 		glyphListItemCanvas.className = "glyphListItemCanvas"
@@ -67,11 +86,14 @@ function buildGlyphList()
 		glyphListItem.appendChild(glyphListItemCanvas)
 		divGlyphList.appendChild(glyphListItem)
 		
-		glyphListItem.onclick = () =>
+		glyphListItem.ondblclick = () =>
 		{
-			console.log("Internal data for glyph 0x" + glyphId.toString(16) + ":")
+			console.log("Data for glyph " + glyphLabel + ":")
 			console.log(gFont.getGlyphData(glyphId))
 			console.log(gFont.getGlyphGeometry(glyphId))
+			
+			if (unicodeIndex != null)
+				window.open("https://r12a.github.io/uniview/?charlist=" + String.fromCodePoint(unicodeIndex), "_blank")
 		}
 		
 		let ctx = glyphListItemCanvas.getContext("2d")

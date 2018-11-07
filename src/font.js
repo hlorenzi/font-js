@@ -17,6 +17,7 @@ export class Font
 		font.readHorizontalMetricsTable(r)
 		font.readIndexToLocationTable(r)
 		font.readGlyphDataTable(r)
+		font.readCharacterToGlyphIndexMappingTable(r)
 		return font
 	}
 	
@@ -48,6 +49,14 @@ export class Font
 			lineBottom: -hheaTable.descender / headTable.unitsPerEm,
 			lineGap:     hheaTable.lineGap   / headTable.unitsPerEm
 		}
+	}
+	
+	
+	getUnicodeMap()
+	{
+		const cmapTable = this.getTable("cmap")
+		
+		return cmapTable.unicodeToGlyphMap
 	}
 	
 	
@@ -450,6 +459,151 @@ export class Font
 	}
 	
 	
+	readCharacterToGlyphIndexMappingTable(r)
+	{
+		let cmapTable = this.getTable("cmap")
+		
+		r.seek(cmapTable.offset)
+		
+		cmapTable.version = r.readUInt16BE()
+		cmapTable.numTables = r.readUInt16BE()
+		
+		cmapTable.encodingRecords = []
+		
+		for (let i = 0; i < cmapTable.numTables; i++)
+		{
+			let encodingRecord = { }
+			
+			encodingRecord.platformID = r.readUInt16BE()
+			encodingRecord.encodingID = r.readUInt16BE()
+			encodingRecord.offset = r.readUInt32BE()
+			encodingRecord.subtable = null
+			
+			cmapTable.encodingRecords.push(encodingRecord)
+		}
+		
+		for (let encodingRecord of cmapTable.encodingRecords)
+		{
+			r.seek(cmapTable.offset + encodingRecord.offset)
+			
+			encodingRecord.subtable = { }
+			encodingRecord.subtable.unicodeToGlyphMap = new Map()
+			
+			encodingRecord.subtable.format = r.readUInt16BE()
+			
+			switch (encodingRecord.subtable.format)
+			{
+				case 4:
+					this.readCharacterToGlyphIndexMappingEncodingSubtableFormat4(r, encodingRecord.subtable)
+					break
+				case 12:
+					this.readCharacterToGlyphIndexMappingEncodingSubtableFormat12(r, encodingRecord.subtable)
+					break
+			}
+		}
+		
+		const UNICODE_PLATFORMID = 0
+		const WINDOWS_PLATFORMID = 3
+		const WINDOWS_UNICODEBMP_ENCODINGID = 1
+		const WINDOWS_UNICODEFULL_ENCODINGID = 10
+		
+		cmapTable.unicodeToGlyphMap = new Map()
+		
+		for (let encodingRecord of cmapTable.encodingRecords)
+		{
+			if (encodingRecord.platformID == UNICODE_PLATFORMID ||
+				(encodingRecord.platformID == WINDOWS_PLATFORMID && encodingRecord.encodingID == WINDOWS_UNICODEBMP_ENCODINGID) ||
+				(encodingRecord.platformID == WINDOWS_PLATFORMID && encodingRecord.encodingID == WINDOWS_UNICODEFULL_ENCODINGID))
+			{
+				for (const [code, glyphId] of encodingRecord.subtable.unicodeToGlyphMap)
+					cmapTable.unicodeToGlyphMap.set(code, glyphId)
+			}
+		}
+	}
+	
+	
+	readCharacterToGlyphIndexMappingEncodingSubtableFormat4(r, subtable)
+	{
+		subtable.length = r.readUInt16BE()
+		subtable.language = r.readUInt16BE()
+		subtable.segCountX2 = r.readUInt16BE()
+		subtable.searchRange = r.readUInt16BE()
+		subtable.entrySelector = r.readUInt16BE()
+		subtable.rangeShift = r.readUInt16BE()
+		
+		subtable.endCode = r.readManyUInt16BE(subtable.segCountX2 / 2)
+		
+		subtable.reservedPad = r.readUInt16BE()
+		
+		subtable.startCode = r.readManyUInt16BE(subtable.segCountX2 / 2)
+		subtable.idDelta = r.readManyInt16BE(subtable.segCountX2 / 2)
+		
+		const idRangeOffsetPosition = r.getPosition()
+		subtable.idRangeOffset = r.readManyUInt16BE(subtable.segCountX2 / 2)
+		
+		for (let c = 0; c <= 0xffff; c++)
+		{
+			for (let i = 0; i < subtable.segCountX2 / 2; i++)
+			{
+				if (c > subtable.endCode[i])
+					continue
+				
+				if (c < subtable.startCode[i])
+					continue
+				
+				if (subtable.idRangeOffset[i] == 0)
+				{
+					const glyphId = (c + subtable.idDelta[i]) % 0x10000
+					
+					subtable.unicodeToGlyphMap.set(c, glyphId)
+				}
+				else
+				{
+					const addr =
+						((subtable.idRangeOffset[i] / 2) + (c - subtable.startCode[i])) * 2 +
+						(idRangeOffsetPosition + i * 2)
+						
+					r.seek(addr)
+					
+					let glyphId = r.readUInt16BE()
+					if (glyphId != 0)
+						glyphId = (glyphId + subtable.idDelta[i]) % 0x10000
+					
+					subtable.unicodeToGlyphMap.set(c, glyphId)
+				}
+				
+				break
+			}
+		}
+	}
+	
+	
+	readCharacterToGlyphIndexMappingEncodingSubtableFormat12(r, subtable)
+	{
+		subtable.reserved = r.readUInt16BE()
+		subtable.length = r.readUInt32BE()
+		subtable.language = r.readUInt32BE()
+		subtable.numGroups = r.readUInt32BE()
+		
+		subtable.groups = []
+		for (let i = 0; i < subtable.numGroups; i++)
+		{
+			let group = { }
+			group.startCharCode = r.readUInt32BE()
+			group.endCharCode = r.readUInt32BE()
+			group.startGlyphID = r.readUInt32BE()
+			
+			subtable.groups.push(group)
+		}
+		
+		for (const group of subtable.groups)
+		{
+			for (let c = group.startCharCode; c <= group.endCharCode; c++)
+				subtable.unicodeToGlyphMap.set(c, group.startGlyphID + c - group.startCharCode)
+		}
+	}
+	
+	
 	readF2Dot14(r)
 	{
 		const raw = r.readUInt16BE()
@@ -506,129 +660,129 @@ export class Font
 			geometry.yMax = Math.max(geometry.yMax, y)
 		}
 		
-		if (glyph == null)
-			return null
-		
-		geometry.isComposite = (glyph.numberOfContours <= 0)
-		
-		// Simple glyph
-		if (!geometry.isComposite)
+		if (glyph != null)
 		{
-			for (let i = 0; i < glyph.endPtsOfContours.length; i++)
-			{
-				const firstPoint = (i == 0 ? 0 : glyph.endPtsOfContours[i - 1] + 1)
-				const lastPoint = glyph.endPtsOfContours[i]
-				
-				let segments = []
-				
-				const pointsInContour = (lastPoint + 1 - firstPoint)
-				
-				for (let p = firstPoint; p <= lastPoint; p++)
-				{
-					const pNext = (p - firstPoint + 1)                   % pointsInContour + firstPoint
-					const pPrev = (p - firstPoint - 1 + pointsInContour) % pointsInContour + firstPoint
-					
-					let x     =  scale * glyph.xCoordinates[p]
-					let y     = -scale * glyph.yCoordinates[p]
-					let xNext =  scale * glyph.xCoordinates[pNext]
-					let yNext = -scale * glyph.yCoordinates[pNext]
-					let xPrev =  scale * glyph.xCoordinates[pPrev]
-					let yPrev = -scale * glyph.yCoordinates[pPrev]
-					
-					if ((glyph.flags[p] & ON_CURVE_POINT_FLAG) == 0)
-					{
-						if ((glyph.flags[pPrev] & ON_CURVE_POINT_FLAG) == 0)
-						{
-							xPrev = (xPrev + x) / 2
-							yPrev = (yPrev + y) / 2
-						}
-						
-						if ((glyph.flags[pNext] & ON_CURVE_POINT_FLAG) == 0)
-						{
-							xNext = (xNext + x) / 2
-							yNext = (yNext + y) / 2
-						}
-						
-						segments.push({
-							kind: "qbezier",
-							x1: xPrev, y1: yPrev,
-							x2: x,     y2: y,
-							x3: xNext, y3: yNext
-						})
-					}
-					else if ((glyph.flags[pNext] & ON_CURVE_POINT_FLAG) != 0)
-					{
-						segments.push({
-							kind: "line",
-							x1: x,     y1: y,
-							x2: xNext, y2: yNext
-						})
-					}
-				}
-				
-				geometry.contours.push(segments)
-			}
-		}
-		
-		// Composite glyph
-		else
-		{
-			const ARGS_ARE_XY_VALUES_FLAG = 0x0002
+			geometry.isComposite = (glyph.numberOfContours <= 0)
 			
-			for (const component of glyph.components)
+			// Simple glyph
+			if (!geometry.isComposite)
 			{
-				const componentGeometry = this.getGlyphGeometry(component.glyphIndex)
-				if (componentGeometry == null)
-					continue
-				
-				if ((component.flags & ARGS_ARE_XY_VALUES_FLAG) == 0)
-					return null
-					
-				const xOffset =  scale * component.argument1
-				const yOffset = -scale * component.argument2
-				
-				for (const contour of componentGeometry.contours)
+				for (let i = 0; i < glyph.endPtsOfContours.length; i++)
 				{
-					for (const segment of contour)
+					const firstPoint = (i == 0 ? 0 : glyph.endPtsOfContours[i - 1] + 1)
+					const lastPoint = glyph.endPtsOfContours[i]
+					
+					let segments = []
+					
+					const pointsInContour = (lastPoint + 1 - firstPoint)
+					
+					for (let p = firstPoint; p <= lastPoint; p++)
 					{
-						// FIXME: scale01 and scale10 not being used correctly?
-						segment.x1 = (segment.x1 * component.xScale) + (segment.y1 * component.scale01)
-						segment.y1 = (segment.y1 * component.yScale) + (segment.x1 * component.scale10)
-						segment.x2 = (segment.x2 * component.xScale) + (segment.y2 * component.scale01)
-						segment.y2 = (segment.y2 * component.yScale) + (segment.x2 * component.scale10)
+						const pNext = (p - firstPoint + 1)                   % pointsInContour + firstPoint
+						const pPrev = (p - firstPoint - 1 + pointsInContour) % pointsInContour + firstPoint
 						
-						if (segment.kind == "qbezier")
+						let x     =  scale * glyph.xCoordinates[p]
+						let y     = -scale * glyph.yCoordinates[p]
+						let xNext =  scale * glyph.xCoordinates[pNext]
+						let yNext = -scale * glyph.yCoordinates[pNext]
+						let xPrev =  scale * glyph.xCoordinates[pPrev]
+						let yPrev = -scale * glyph.yCoordinates[pPrev]
+						
+						if ((glyph.flags[p] & ON_CURVE_POINT_FLAG) == 0)
 						{
-							segment.x3 = (segment.x3 * component.xScale) + (segment.y3 * component.scale01)
-							segment.y3 = (segment.y3 * component.yScale) + (segment.x3 * component.scale10)
+							if ((glyph.flags[pPrev] & ON_CURVE_POINT_FLAG) == 0)
+							{
+								xPrev = (xPrev + x) / 2
+								yPrev = (yPrev + y) / 2
+							}
+							
+							if ((glyph.flags[pNext] & ON_CURVE_POINT_FLAG) == 0)
+							{
+								xNext = (xNext + x) / 2
+								yNext = (yNext + y) / 2
+							}
+							
+							segments.push({
+								kind: "qbezier",
+								x1: xPrev, y1: yPrev,
+								x2: x,     y2: y,
+								x3: xNext, y3: yNext
+							})
 						}
-						
-						segment.x1 += xOffset
-						segment.y1 += yOffset
-						segment.x2 += xOffset
-						segment.y2 += yOffset
-						
-						if (segment.kind == "qbezier")
+						else if ((glyph.flags[pNext] & ON_CURVE_POINT_FLAG) != 0)
 						{
-							segment.x3 += xOffset
-							segment.y3 += yOffset
+							segments.push({
+								kind: "line",
+								x1: x,     y1: y,
+								x2: xNext, y2: yNext
+							})
 						}
 					}
 					
-					geometry.contours.push(contour)
+					geometry.contours.push(segments)
 				}
 			}
-		}
-		
-		for (const contour of geometry.contours)
-		{
-			for (const segment of contour)
+			
+			// Composite glyph
+			else
 			{
-				updateMeasures(segment.x1, segment.y1)
-				updateMeasures(segment.x2, segment.y2)
+				const ARGS_ARE_XY_VALUES_FLAG = 0x0002
 				
-				if (segment.kind == "qbezier")
-					updateMeasures(segment.x3, segment.y3)
+				for (const component of glyph.components)
+				{
+					const componentGeometry = this.getGlyphGeometry(component.glyphIndex)
+					if (componentGeometry == null)
+						continue
+					
+					if ((component.flags & ARGS_ARE_XY_VALUES_FLAG) == 0)
+						return null
+						
+					const xOffset =  scale * component.argument1
+					const yOffset = -scale * component.argument2
+					
+					for (const contour of componentGeometry.contours)
+					{
+						for (const segment of contour)
+						{
+							// FIXME: scale01 and scale10 not being used correctly?
+							segment.x1 = (segment.x1 * component.xScale) + (segment.y1 * component.scale01)
+							segment.y1 = (segment.y1 * component.yScale) + (segment.x1 * component.scale10)
+							segment.x2 = (segment.x2 * component.xScale) + (segment.y2 * component.scale01)
+							segment.y2 = (segment.y2 * component.yScale) + (segment.x2 * component.scale10)
+							
+							if (segment.kind == "qbezier")
+							{
+								segment.x3 = (segment.x3 * component.xScale) + (segment.y3 * component.scale01)
+								segment.y3 = (segment.y3 * component.yScale) + (segment.x3 * component.scale10)
+							}
+							
+							segment.x1 += xOffset
+							segment.y1 += yOffset
+							segment.x2 += xOffset
+							segment.y2 += yOffset
+							
+							if (segment.kind == "qbezier")
+							{
+								segment.x3 += xOffset
+								segment.y3 += yOffset
+							}
+						}
+						
+						geometry.contours.push(contour)
+					}
+				}
+			}
+			
+			for (const contour of geometry.contours)
+			{
+				for (const segment of contour)
+				{
+					updateMeasures(segment.x1, segment.y1)
+					updateMeasures(segment.x2, segment.y2)
+					
+					if (segment.kind == "qbezier")
+						updateMeasures(segment.x3, segment.y3)
+				}
 			}
 		}
 		

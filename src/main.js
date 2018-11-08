@@ -15,6 +15,7 @@ inputFile.onchange = () =>
 }
 
 document.getElementById("checkboxDrawMetrics").onchange = () => refresh()
+document.getElementById("checkboxSortUnicode").onchange = () => refresh()
 
 
 function loadFont(buffer)
@@ -60,18 +61,17 @@ function buildGlyphList()
 	}
 	
 	const drawMetrics = document.getElementById("checkboxDrawMetrics").checked
+	const sortByUnicode = document.getElementById("checkboxSortUnicode").checked
 	const lineMetrics = gFont.getHorizontalLineMetrics()
 	
-	const glyphCount = gFont.getGlyphCount()
-	for (let glyphId = 0; glyphId < glyphCount; glyphId++)
+	let addGlyphSlot = (glyphId, unicodeIndex) =>
 	{
 		let glyphListItem = document.createElement("div")
 		glyphListItem.className = "glyphListItem"
 		
-		const unicodeIndex = glyphToUnicodeMap.get(glyphId)
-		const glyphLabel =
-			"#" + glyphId.toString() +
-			" (U+" + (unicodeIndex == null ? "????" : unicodeIndex.toString(16).padStart(4, "0")) + ")"
+		let glyphLabel = "..."
+		if (glyphId != null)
+			glyphLabel = "#" + glyphId.toString() + " (U+" + (unicodeIndex == null ? "????" : unicodeIndex.toString(16).padStart(4, "0")) + ")"
 		
 		let glyphListItemLabel = document.createElement("div")
 		glyphListItemLabel.className = "glyphListItemLabel"
@@ -88,6 +88,9 @@ function buildGlyphList()
 		
 		glyphListItem.ondblclick = () =>
 		{
+			if (glyphId == null)
+				return
+			
 			console.log("Data for glyph " + glyphLabel + ":")
 			console.log(gFont.getGlyphData(glyphId))
 			console.log(gFont.getGlyphGeometry(glyphId))
@@ -98,8 +101,53 @@ function buildGlyphList()
 		
 		let ctx = glyphListItemCanvas.getContext("2d")
 		
-		let geometry = gFont.getGlyphGeometry(glyphId)
+		let geometry = (glyphId == null ? null : gFont.getGlyphGeometry(glyphId))
 		renderGlyphGeometry(ctx, geometry, lineMetrics, drawMetrics)
+	}
+	
+	const glyphCount = gFont.getGlyphCount()
+	
+	if (!sortByUnicode)
+	{
+		for (let glyphId = 0; glyphId < glyphCount; glyphId++)
+			addGlyphSlot(glyphId, glyphToUnicodeMap.get(glyphId))
+		
+	}
+	else
+	{
+		let availableUnicode = []
+		for (const [code, glyphId] of unicodeMap)
+			availableUnicode.push(code)
+		
+		let availableGlyphsSet = new Set()
+		for (let glyphId = 0; glyphId < glyphCount; glyphId++)
+			availableGlyphsSet.add(glyphId)
+		
+		let prevUnicodeAdded = -1
+		availableUnicode.sort((a, b) => a - b)
+		for (const code of availableUnicode)
+		{
+			if (code != prevUnicodeAdded + 1 && prevUnicodeAdded >= 0)
+				addGlyphSlot(null, null)
+			
+			prevUnicodeAdded = code
+			
+			const glyphId = unicodeMap.get(code)
+			addGlyphSlot(glyphId, code)
+			availableGlyphsSet.delete(glyphId)
+		}
+		
+		let availableGlyphs = []
+		for (const glyphId of availableGlyphsSet)
+			availableGlyphs.push(glyphId)
+		
+		availableGlyphs.sort((a, b) => a - b)
+		
+		if (availableGlyphs.length > 0)
+			addGlyphSlot(null, null)
+		
+		for (const glyphId of availableGlyphs)
+			addGlyphSlot(glyphId, null)
 	}
 }
 

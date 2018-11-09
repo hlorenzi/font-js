@@ -160,7 +160,7 @@ function renderGlyphGeometry(ctx, geometry, lineMetrics, drawMetrics)
 	if (geometry == null)
 		return
 	
-	const scale = 1 / (lineMetrics.lineBottom - lineMetrics.lineTop) * 90
+	const scale = 1 / (lineMetrics.lineBottom - lineMetrics.lineTop + lineMetrics.lineGap * 2) * 90
 	
 	ctx.translate(50, 50)
 	ctx.scale(scale, scale)
@@ -175,6 +175,10 @@ function renderGlyphGeometry(ctx, geometry, lineMetrics, drawMetrics)
 		ctx.fillStyle = "#fb8"
 		ctx.fillRect(-1000, -1000, 2000, lineMetrics.lineTop + 1000)
 		ctx.fillRect(-1000, lineMetrics.lineBottom, 2000, 1000)
+		
+		ctx.fillStyle = "#f96"
+		ctx.fillRect(-1000, -1000, 2000, lineMetrics.lineTop - lineMetrics.lineGap + 1000)
+		ctx.fillRect(-1000, lineMetrics.lineBottom + lineMetrics.lineGap, 2000, 1000)
 		
 		ctx.lineWidth = 1 / scale
 		

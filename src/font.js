@@ -6,9 +6,10 @@ export class Font
 	}
 	
 	
-	static fromReader(r)
+	static fromReader(r, preparseGlyphs = false)
 	{
 		let font = new Font()
+		font.data = r
 		font.readOffsetTable(r)
 		font.readTableRecord(r)
 		font.readFontHeaderTable(r)
@@ -16,7 +17,10 @@ export class Font
 		font.readMaximumProfileTable(r)
 		font.readHorizontalMetricsTable(r)
 		font.readIndexToLocationTable(r)
-		font.readGlyphDataTable(r)
+		
+		if (preparseGlyphs)
+			font.readGlyphDataTable(r)
+		
 		font.readCharacterToGlyphIndexMappingTable(r)
 		return font
 	}
@@ -33,9 +37,9 @@ export class Font
 	
 	getGlyphCount()
 	{
-		const glyfTable = this.getTable("glyf")
+		const maxpTable = this.getTable("maxp")
 		
-		return glyfTable.glyphs.length
+		return maxpTable.numGlyphs
 	}
 	
 	
@@ -618,11 +622,28 @@ export class Font
 	}
 	
 	
+	fetchGlyphOnDemand(r, glyphId)
+	{
+		const maxpTable = this.getTable("maxp")
+		const locaTable = this.getTable("loca")
+		const glyfTable = this.getTable("glyf")
+		
+		if (glyphId < 0 || glyphId > maxpTable.numGlyphs)
+			return null
+		
+		if (locaTable.offsets[glyphId] == null)
+			return null
+		
+		r.seek(glyfTable.offset + locaTable.offsets[glyphId])
+		return this.readGlyph(r, glyphId)
+	}
+	
+	
 	getGlyphData(glyphId)
 	{
 		const glyfTable = this.getTable("glyf")
 		
-		return glyfTable.glyphs[glyphId]
+		return (glyfTable.glyphs ? glyfTable.glyphs[glyphId] : this.fetchGlyphOnDemand(this.data, glyphId))
 	}
 	
 	
@@ -630,8 +651,7 @@ export class Font
 	{
 		const headTable = this.getTable("head")
 		const hmtxTable = this.getTable("hmtx")
-		const glyfTable = this.getTable("glyf")
-		const glyph = glyfTable.glyphs[glyphId]
+		const glyph = this.getGlyphData(glyphId)
 		
 		const ON_CURVE_POINT_FLAG = 0x01
 		
@@ -787,5 +807,55 @@ export class Font
 		}
 		
 		return geometry
+	}
+	
+	
+	static simplifyBezierContours(geometry, steps = 100)
+	{
+		if (geometry == null)
+			return geometry
+		
+		let simplifiedContours = []
+		
+		for (const contour of geometry.contours)
+		{
+			let simplifiedSegments = []
+			
+			for (const segment of contour)
+			{
+				if (segment.kind == "line")
+					simplifiedSegments.push(segment)
+				
+				else if (segment.kind == "qbezier")
+				{
+					for (let i = 0; i < steps; i++)
+					{
+						const t1 = (i + 0) / steps
+						const t2 = (i + 1) / steps
+						
+						const x1 = Font.qbezier(t1, segment.x1, segment.x2, segment.x3)
+						const y1 = Font.qbezier(t1, segment.y1, segment.y2, segment.y3)
+						const x2 = Font.qbezier(t2, segment.x1, segment.x2, segment.x3)
+						const y2 = Font.qbezier(t2, segment.y1, segment.y2, segment.y3)
+						
+						simplifiedSegments.push({
+							kind: "line",
+							x1, y1, x2, y2
+						})
+					}
+				}
+			}
+			
+			simplifiedContours.push(simplifiedSegments)
+		}
+		
+		geometry.contours = simplifiedContours
+		return geometry
+	}
+	
+	
+	static qbezier(t, p0, p1, p2)
+	{
+		return (1 - t) * ((1 - t) * p0 + t * p1) + t * ((1 - t) * p1 + t * p2)
 	}
 }

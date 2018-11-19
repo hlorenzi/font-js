@@ -10,28 +10,43 @@ export class FontRenderer
 		
 		let buffer = new Uint8Array(width * height)
 		
+		let intersectingEdges = []
+		for (const contour of geometry.contours)
+		{
+			for (const edge of contour)
+			{
+				if (edge.y1 == edge.y2)
+					continue
+				
+				intersectingEdges.push({
+					x1: edge.x1,
+					y1: edge.y1,
+					x2: edge.x2,
+					y2: edge.y2,
+					xAtCurrentScanline: 0,
+					winding: 0
+				})
+			}
+		}
+		
 		for (let y = 0; y < height; y++)
 		{
 			const yEmSpace = geometry.yMin + ((y - 1) / (height - 2)) * (geometry.yMax - geometry.yMin)
 			
-			let intersectingEdges = []
-			for (const contour of geometry.contours)
+			for (let edge of intersectingEdges)
 			{
-				for (const edge of contour)
+				if (Math.min(edge.y1, edge.y2) >= yEmSpace || Math.max(edge.y1, edge.y2) < yEmSpace)
 				{
-					if (Math.min(edge.y1, edge.y2) >= yEmSpace || Math.max(edge.y1, edge.y2) < yEmSpace)
-						continue
-					
-					if (edge.y1 == edge.y2)
-						continue
-					
-					const edgeXAtThisScanline = edge.x1 + (yEmSpace - edge.y1) / (edge.y2 - edge.y1) * (edge.x2 - edge.x1)
-					const winding = (edge.y2 > edge.y1) ? 1 : -1
-					intersectingEdges.push({ x: edgeXAtThisScanline, winding })
+					edge.xAtCurrentScanline = 0
+					edge.winding = 0
+					continue
 				}
+				
+				edge.xAtCurrentScanline = edge.x1 + (yEmSpace - edge.y1) / (edge.y2 - edge.y1) * (edge.x2 - edge.x1)
+				edge.winding = (edge.y2 > edge.y1) ? 1 : -1
 			}
 			
-			intersectingEdges.sort((a, b) => a.x - b.x)
+			intersectingEdges.sort((a, b) => a.xAtCurrentScanline - b.xAtCurrentScanline)
 			
 			let currentWinding = 0
 			let currentIntersection = 0
@@ -39,7 +54,8 @@ export class FontRenderer
 			{
 				const xEmSpace = geometry.xMin + ((x - 1) / (width  - 2)) * (geometry.xMax - geometry.xMin)
 				
-				while (currentIntersection < intersectingEdges.length && intersectingEdges[currentIntersection].x <= xEmSpace)
+				while (currentIntersection < intersectingEdges.length &&
+					intersectingEdges[currentIntersection].xAtCurrentScanline <= xEmSpace)
 				{
 					currentWinding += intersectingEdges[currentIntersection].winding
 					currentIntersection += 1

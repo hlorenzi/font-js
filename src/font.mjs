@@ -1,8 +1,17 @@
+import { ByteReader } from "./byteReader.mjs"
+
+
 export class Font
 {
 	constructor()
 	{
 		this.warnings = []
+	}
+	
+	
+	static fromBytes(bytes, preparseGlyphs = false)
+	{
+		return Font.fromReader(new ByteReader(bytes), preparseGlyphs)
 	}
 	
 	
@@ -647,7 +656,7 @@ export class Font
 	}
 	
 	
-	getGlyphGeometry(glyphId)
+	getGlyphGeometry(glyphId, simplifySteps = 0)
 	{
 		const headTable = this.getTable("head")
 		const hmtxTable = this.getTable("hmtx")
@@ -670,7 +679,7 @@ export class Font
 		else
 			hMetric = hmtxTable.hMetrics[glyphId]
 		
-		geometry.advance = hMetric.advanceWidth / headTable.unitsPerEm
+		geometry.advance = (hMetric ? hMetric.advanceWidth / headTable.unitsPerEm : 0)
 		
 		let updateMeasures = (x, y) =>
 		{
@@ -805,6 +814,9 @@ export class Font
 				}
 			}
 		}
+		
+		if (simplifySteps > 0)
+			geometry = Font.simplifyBezierContours(geometry, simplifySteps)
 		
 		return geometry
 	}

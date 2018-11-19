@@ -1,6 +1,6 @@
-import { ByteReader } from "./byteReader.js"
-import { Font } from "./font.js"
-import { FontRenderer } from "./fontRenderer.js"
+import { ByteReader } from "./byteReader.mjs"
+import { Font } from "./font.mjs"
+import { FontRenderer } from "./fontRenderer.mjs"
 
 
 let gFont = null

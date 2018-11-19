@@ -1,4 +1,4 @@
-import { Vec2 } from "./vec2.js"
+import { Vec2 } from "./vec2.mjs"
 
 
 export class FontRenderer

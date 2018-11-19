@@ -1,0 +1,23 @@
+{
+  "name": "font-inspect",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "start": "node --experimental-modules index.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hlorenzi/font-inspect.git"
+  },
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/hlorenzi/font-inspect/issues"
+  },
+  "homepage": "https://github.com/hlorenzi/font-inspect#readme",
+  "dependencies": {
+    "pngjs": "^3.3.3"
+  }
+}

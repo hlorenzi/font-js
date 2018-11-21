@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/hlorenzi/font-inspect#readme",
   "dependencies": {
+    "minimist": "^1.2.0",
     "pngjs": "^3.3.3"
   }
 }

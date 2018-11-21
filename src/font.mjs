@@ -37,9 +37,9 @@ export class Font
 	
 	*enumerateGlyphIds()
 	{
-		const glyfTable = this.getTable("glyf")
+		const count = this.getGlyphCount()
 		
-		for (let i = 0; i < glyfTable.glyphs.length; i++)
+		for (let i = 0; i < count; i++)
 			yield i
 	}
 	

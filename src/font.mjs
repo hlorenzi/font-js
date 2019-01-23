@@ -1,6 +1,71 @@
 import { ByteReader } from "./byteReader.mjs"
 
 
+export class FontCollection
+{
+	constructor()
+	{
+		this.warnings = []
+		this.fonts = []
+	}
+	
+	
+	static fromBytes(bytes, preparseGlyphs = false)
+	{
+		return Font.fromReader(new ByteReader(bytes), preparseGlyphs)
+	}
+	
+	
+	static fromReader(r, preparseGlyphs = false)
+	{
+		let fontCollection = new FontCollection()
+		fontCollection.data = r
+		
+		fontCollection.readCollectionHeader(r)
+		
+		for (let offset of fontCollection.offsetTables)
+		{
+			r.seek(offset)
+			fontCollection.fonts.push(Font.fromReader(r.clone(), preparseGlyphs))			
+		}
+		
+		return fontCollection
+	}
+	
+	
+	getFont(index)
+	{
+		return this.fonts[index]
+	}
+	
+	
+	readCollectionHeader(r)
+	{
+		const tag = r.readAsciiLength(4)
+		
+		if (tag == "ttcf")
+		{
+			this.ttcTag = tag
+			this.majorVersion = r.readUInt16BE()
+			this.minorVersion = r.readUInt16BE()
+			this.numFonts = r.readUInt32BE()
+			this.offsetTables = r.readManyUInt32BE(this.numFonts)
+			
+			if (this.majorVersion == 2)
+			{
+				this.dsigTag = r.readUInt32BE()
+				this.dsigLength = r.readUInt32BE()
+				this.dsigOffset = r.readUInt32BE()
+			}
+		}
+		else
+		{
+			this.offsetTables = [0]
+		}
+	}
+}
+
+
 export class Font
 {
 	constructor()
@@ -19,9 +84,11 @@ export class Font
 	{
 		let font = new Font()
 		font.data = r
+		
 		font.readOffsetTable(r)
 		font.readTableRecord(r)
 		font.readFontHeaderTable(r)
+		font.readNamingTable(r)
 		font.readHorizontalHeaderTable(r)
 		font.readMaximumProfileTable(r)
 		font.readHorizontalMetricsTable(r)
@@ -154,6 +221,89 @@ export class Font
 		
 		if (table.indexToLocFormat != 0 && table.indexToLocFormat != 1)
 			throw "invalid `head` indexToLocFormat"
+	}
+	
+	
+	readNamingTable(r)
+	{
+		let table = this.getTable("name")
+		
+		r.seek(table.offset)
+		
+		table.format = r.readUInt16BE()
+		table.count = r.readUInt16BE()
+		table.stringOffset = r.readUInt16BE()
+		
+		table.nameRecords = []
+		for (let i = 0; i < table.count; i++)
+		{
+			let nameRecord = { }
+			nameRecord.platformID = r.readUInt16BE()
+			nameRecord.encodingID = r.readUInt16BE()
+			nameRecord.languageID = r.readUInt16BE()
+			nameRecord.nameID = r.readUInt16BE()
+			nameRecord.length = r.readUInt16BE()
+			nameRecord.offset = r.readUInt16BE()
+			nameRecord.string = null
+			table.nameRecords.push(nameRecord)
+		}
+		
+		if (table.format == 1)
+		{
+			table.langTagCount = r.readUInt16BE()
+			
+			table.langTagRecords = []
+			for (let i = 0; i < table.langTagCount; i++)
+			{
+				let langTagRecord = { }
+				langTagRecord.length = r.readUInt16BE()
+				langTagRecord.offset = r.readUInt16BE()
+				langTagRecord.string = null
+				table.langTagRecords.push(langTagRecord)
+			}
+		}
+		
+		const stringDataOffset = r.getPosition()
+		
+		for (let nameRecord of table.nameRecords)
+		{
+			if ((nameRecord.platformID == 0) ||
+				(nameRecord.platformID == 3 && nameRecord.encodingID == 1))
+			{			
+				r.seek(stringDataOffset + nameRecord.offset)
+				nameRecord.string = r.readUTF16BELength(nameRecord.length / 2)
+			}
+		}
+		
+		const findMostSuitableString = (nameID) =>
+		{
+			let foundString = null
+			for (let nameRecord of table.nameRecords)
+			{
+				if (nameRecord.string == null)
+					continue
+				
+				if (nameRecord.nameID != nameID)
+					continue
+				
+				if (nameRecord.languageID == 0)
+					return nameRecord.string
+				
+				foundString = nameRecord.string
+			}
+			
+			return foundString
+		}
+		
+		this.fontCopyright        = findMostSuitableString(0)
+		this.fontFamilyName       = findMostSuitableString(1)
+		this.fontSubfamilyName    = findMostSuitableString(2)
+		this.fontUniqueIdentifier = findMostSuitableString(3)
+		this.fontFullName         = findMostSuitableString(4)
+		this.fontVersionString    = findMostSuitableString(5)
+		this.fontPostScriptName   = findMostSuitableString(6)
+		this.fontTrademark        = findMostSuitableString(7)
+		this.fontManufacturer     = findMostSuitableString(8)
 	}
 	
 	

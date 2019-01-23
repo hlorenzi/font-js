@@ -1,9 +1,10 @@
 import { ByteReader } from "./byteReader.mjs"
-import { Font } from "./font.mjs"
+import { Font, FontCollection } from "./font.mjs"
 import { FontRenderer } from "./fontRenderer.mjs"
 
 
-let gFont = null
+let gFontCollection = null
+let gFontIndex = 0
 let gRenderGlyphTimeout = null
 
 
@@ -25,17 +26,42 @@ function loadFont(buffer)
 {
 	let r = new ByteReader(buffer)
 	
-	try { gFont = Font.fromReader(r) }
+	try { gFontCollection = FontCollection.fromReader(r) }
 	catch (e)
 	{
 		window.alert("Error loading font!")
 		throw e
 	}
 	
-	for (const warning of gFont.warnings)
+	for (const warning of gFontCollection.warnings)
 		console.warn(warning)
 	
-	console.log(gFont)
+	let selectFontIndex = document.getElementById("selectFontIndex")
+	while (selectFontIndex.firstChild)
+		selectFontIndex.removeChild(selectFontIndex.firstChild)
+	
+	for (let i = 0; i < gFontCollection.fonts.length; i++)
+	{
+		const familyName = gFontCollection.fonts[i].fontFamilyName
+		const subfamilyName = gFontCollection.fonts[i].fontSubfamilyName
+		const fullName = "[" + i + "] " +
+			(familyName == null || subfamilyName == null ? "" : familyName + " " + subfamilyName)
+		
+		let option = document.createElement("option")
+		option.innerHTML = fullName
+		option.value = i
+		selectFontIndex.appendChild(option)
+	}
+	
+	selectFontIndex.selected = gFontIndex = 0
+	selectFontIndex.disabled = (gFontCollection.fonts.length <= 1)
+	selectFontIndex.onchange = () =>
+	{
+		gFontIndex = parseInt(selectFontIndex.value)
+		refresh()
+	}
+	
+	console.log(gFontCollection)
 	refresh()
 }
 
@@ -52,10 +78,12 @@ function buildGlyphList()
 	while (divGlyphList.firstChild)
 		divGlyphList.removeChild(divGlyphList.firstChild)
 	
-	if (gFont == null)
+	if (gFontCollection == null)
 		return
 	
-	const unicodeMap = gFont.getUnicodeMap()
+	let font = gFontCollection.getFont(gFontIndex)
+	
+	const unicodeMap = font.getUnicodeMap()
 	let glyphToUnicodeMap = new Map()
 	for (const [code, glyphId] of unicodeMap)
 	{
@@ -65,7 +93,7 @@ function buildGlyphList()
 	
 	const sortByUnicode = document.getElementById("checkboxSortUnicode").checked
 	
-	const glyphCount = gFont.getGlyphCount()
+	const glyphCount = font.getGlyphCount()
 	
 	let glyphSlotsToAdd = []
 	
@@ -138,6 +166,8 @@ function addGlyphSlotIterator(glyphSlotsToAdd, countPerIteration, i = 0)
 
 function addGlyphSlot(glyphId, unicodeIndex)
 {
+	let font = gFontCollection.getFont(gFontIndex)
+	
 	let glyphListItem = document.createElement("div")
 	glyphListItem.className = "glyphListItem"
 	
@@ -164,8 +194,8 @@ function addGlyphSlot(glyphId, unicodeIndex)
 			return
 		
 		console.log("Data for glyph " + glyphLabel + ":")
-		console.log(gFont.getGlyphData(glyphId))
-		console.log(gFont.getGlyphGeometry(glyphId))
+		console.log(font.getGlyphData(glyphId))
+		console.log(font.getGlyphGeometry(glyphId))
 		
 		if (unicodeIndex != null)
 			window.open("https://r12a.github.io/uniview/?charlist=" + String.fromCodePoint(unicodeIndex), "_blank")
@@ -176,9 +206,9 @@ function addGlyphSlot(glyphId, unicodeIndex)
 	const drawMetrics = document.getElementById("checkboxDrawMetrics").checked
 	const useCustomRasterizer = document.getElementById("checkboxCustomRender").checked
 	
-	const lineMetrics = gFont.getHorizontalLineMetrics()
+	const lineMetrics = font.getHorizontalLineMetrics()
 	
-	const geometry = (glyphId == null ? null : gFont.getGlyphGeometry(glyphId))
+	const geometry = (glyphId == null ? null : font.getGlyphGeometry(glyphId))
 	
 	if (useCustomRasterizer)
 		renderGlyphGeometryCustom(ctx, geometry, lineMetrics, drawMetrics)

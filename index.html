@@ -67,17 +67,17 @@
 	<body>
 		<div id="divLayout">
 			<div style="grid-row:1; grid-column:1;">
-				<input id="inputFile" type="file" accept=".ttf,.otf"></input>
+				<input id="inputFile" type="file" accept=".ttf,.otf,.ttc,.otc"></input>
+				<span style="font-size:0.75em; margin-left:1.5em;">Check the Console for extra output!</span>
 				<br>
 				<br>
-				Check the Console for extra output!
-				<br>
-				<br>
+				Sub-font: <select id="selectFontIndex" disabled><option>No font loaded</option></select>
 				<label for="checkboxDrawMetrics"><input id="checkboxDrawMetrics" type="checkbox" checked></input> Draw Glyph Metrics</label>
 				<label for="checkboxSortUnicode"><input id="checkboxSortUnicode" type="checkbox"></input> Sort by Unicode</label>
 				<label for="checkboxCustomRender"><input id="checkboxCustomRender" type="checkbox"></input> DEBUG: Custom Rasterizer</label>
 				<br>
 				<span style="font-size:0.75em;">(Double-click a glyph to print geometry data to the Console and inspect its Unicode codepoint.)</span>
+				<br>
 				<br>
 			</div>
 			

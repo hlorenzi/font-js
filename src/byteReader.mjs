@@ -7,6 +7,14 @@ export class ByteReader
 	}
 	
 	
+	clone()
+	{
+		let r = new ByteReader(this.bytes)
+		r.head = this.head
+		return r
+	}
+	
+	
 	getLength()
 	{
 		return this.bytes.length
@@ -223,6 +231,16 @@ export class ByteReader
 			
 			str += String.fromCharCode(c)
 		}
+		
+		return str
+	}
+	
+	
+	readUTF16BELength(length)
+	{
+		let str = ""
+		for (let i = 0; i < length; i++)
+			str += String.fromCharCode(this.readUInt16BE())
 		
 		return str
 	}

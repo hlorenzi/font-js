@@ -923,27 +923,21 @@ export class Font
 					{
 						for (const segment of contour)
 						{
-							// FIXME: scale01 and scale10 not being used correctly?
-							segment.x1 = (segment.x1 * component.xScale) + (segment.y1 * component.scale01)
-							segment.y1 = (segment.y1 * component.yScale) + (segment.x1 * component.scale10)
-							segment.x2 = (segment.x2 * component.xScale) + (segment.y2 * component.scale01)
-							segment.y2 = (segment.y2 * component.yScale) + (segment.x2 * component.scale10)
+							const newX1 = (segment.x1 * component.xScale) + (segment.y1 * component.scale01) + xOffset
+							const newY1 = (segment.y1 * component.yScale) + (segment.x1 * component.scale10) + yOffset
+							const newX2 = (segment.x2 * component.xScale) + (segment.y2 * component.scale01) + xOffset
+							const newY2 = (segment.y2 * component.yScale) + (segment.x2 * component.scale10) + yOffset
+							segment.x1 = newX1
+							segment.y1 = newY1
+							segment.x2 = newX2
+							segment.y2 = newY2
 							
 							if (segment.kind == "qbezier")
 							{
-								segment.x3 = (segment.x3 * component.xScale) + (segment.y3 * component.scale01)
-								segment.y3 = (segment.y3 * component.yScale) + (segment.x3 * component.scale10)
-							}
-							
-							segment.x1 += xOffset
-							segment.y1 += yOffset
-							segment.x2 += xOffset
-							segment.y2 += yOffset
-							
-							if (segment.kind == "qbezier")
-							{
-								segment.x3 += xOffset
-								segment.y3 += yOffset
+								const newX3 = (segment.x3 * component.xScale) + (segment.y3 * component.scale01) + xOffset
+								const newY3 = (segment.y3 * component.yScale) + (segment.x3 * component.scale10) + yOffset
+								segment.x3 = newX3
+								segment.y3 = newY3
 							}
 						}
 						

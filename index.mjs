@@ -1,5 +1,6 @@
 import { Font } from "./src/font.mjs"
 import { FontRenderer } from "./src/fontRenderer.mjs"
+import { parseGlyphRange } from "./glyphRangeParser.mjs"
 import fs from "fs"
 import minimist from "minimist"
 import PNG from "pngjs"
@@ -11,7 +12,7 @@ Usage:
 	font-inspect <FONT-FILE> [options]
 
 Options:
-	--glyphs GLYPH-LIST  (default "U+0..U+ff")
+	--glyphs GLYPH_LIST  (default "U+0..U+ff")
 		The list of glyphs to extract.
 		You can use decimal glyph IDs (#1234), hex Unicode codepoints (U+1abcd), ranges (..), and commas.
 		You can also just use an asterisk (*) to specify all glyphs.
@@ -40,20 +41,24 @@ Options:
 			PNG file with a distance field rasterization of the glyph, along with
 			a JSON file as above, with metrics relative to the generated image.
 			
-	--out OUTPUT-FILENAME  (default "./glyph{glyphid}")
+	--out OUTPUT_FILENAME  (default "./glyph[glyphid]")
 		The output filename to use for generated files.
 		The correct file extension will be appended automatically.
 		You can include the following tags to be replaced at output time:
 		
-		"{glyphid}" Decimal glyph ID of the current glyph, without the # prefix.
-		"{unicode}" Hex Unicode codepoint of the current glyph, without the U+ prefix.
+		"[glyphid]" Decimal glyph ID of the current glyph, without the # prefix.
+		"[unicode]" Hex Unicode codepoint of the current glyph, without the U+ prefix.
 		
 	--size SIZE  (default 256)
 		The size of 1 font unit in pixels (usually the height of a line of text)
 		for image generation.
 		
-	--use-alpha  (default no)
+	--use-alpha
 		Use the alpha channel in generated images, instead of the color channels.
+		
+	--gamma VALUE  (default 2.2)
+		The gamma correction value to divide accumulated color samples for
+		grayscale image outputs.
 `
 
 const exitWithUsage = () =>
@@ -69,29 +74,36 @@ if (opts._.length != 1)
 	exitWithUsage()
 
 const argFontFile = opts._[0]
-const argSize = opts.size || 256
-const argOut = opts.out || "./glyph{glyphid}"
+const argSize = parseInt(opts.size) || 256
+const argOut = opts.out || "./glyph[glyphid]"
+const argMode = opts.mode || "png-grayscale"
+const argUseAlpha = !!opts["use-alpha"]
+const argGamma = parseFloat(opts.gamma) || 2.2
 
 // Load the font file.
 const bytes = fs.readFileSync(argFontFile)
 const font = Font.fromBytes(bytes)
 
 // Load the glyph list.
-const argGlyphList = []
-if (!opts.glyphs || opts.glyphs == "*")
+let argGlyphList = parseGlyphRange(opts.glyphs || "*")
+if (!argGlyphList)
 {
+	argGlyphList = { unicodeCodepoints: [], glyphIds: [] }
 	for (const id of font.enumerateGlyphIds())
-		argGlyphList.push(id)
+		argGlyphList.glyphIds.push(id)
 }
 
 // Render glyphs.
-for (const glyphId of argGlyphList)
+for (const glyphId of argGlyphList.glyphIds)
 {
-	console.log("glyph " + glyphId + "...")
+	console.log("glyph #" + glyphId + "...")
 	
 	//const glyphId = font.getUnicodeMap().get("M".codePointAt(0))
 	const geometry = font.getGlyphGeometry(glyphId, 100)
-	const image = FontRenderer.renderGlyph(geometry, argSize)
+	const image =
+		argMode == "png-grayscale" ?
+		FontRenderer.renderGlyphGrayscale(geometry, argSize, { gammaCorrection: argGamma }) :
+		FontRenderer.renderGlyph(geometry, argSize)
 
 	let png = new PNG.PNG({ width: image.width, height: image.height, colorType: 6 })
 	for (let y = 0; y < image.height; y++)
@@ -99,15 +111,26 @@ for (const glyphId of argGlyphList)
 		for (let x = 0; x < image.width; x++)
 		{
 			const i = (y * image.width + x)
-			png.data[i * 4 + 0] = 0
-			png.data[i * 4 + 1] = 0
-			png.data[i * 4 + 2] = 0
-			png.data[i * 4 + 3] = 255 - image.buffer[i]
+			
+			if (argUseAlpha)
+			{
+				png.data[i * 4 + 0] = 255
+				png.data[i * 4 + 1] = 255
+				png.data[i * 4 + 2] = 255
+				png.data[i * 4 + 3] = image.buffer[i]
+			}
+			else
+			{
+				png.data[i * 4 + 0] = image.buffer[i]
+				png.data[i * 4 + 1] = image.buffer[i]
+				png.data[i * 4 + 2] = image.buffer[i]
+				png.data[i * 4 + 3] = 255
+			}
 		}
 	}
 	
 	let outputFilename = argOut
-		.replace(/\{glyphid\}/, glyphId.toString().padStart(6))
+		.replace(/\[glyphid\]/, glyphId.toString())
 
 	fs.writeFileSync(outputFilename + ".png", PNG.PNG.sync.write(png))
 }

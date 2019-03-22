@@ -61,7 +61,45 @@ export class FontRenderer
 					currentIntersection += 1
 				}
 				
-				buffer[y * width + x] = (currentWinding == 0 ? 255 : 0)
+				buffer[y * width + x] = (currentWinding == 0 ? 0 : 255)
+			}
+		}
+		
+		return { width, height, buffer }
+	}
+	
+	
+	static renderGlyphGrayscale(geometry, emToPixelSize, config = {})
+	{
+		const mult = config.sizeMultiplier || 16
+		const xOff = -mult
+		const yOff = -mult
+		const gammaCorrection = config.gammaCorrection || 2.2
+		
+		const binaryRender = FontRenderer.renderGlyph(geometry, emToPixelSize * mult)
+		
+		const width  = Math.ceil((geometry.xMax - geometry.xMin) * emToPixelSize) + 2
+		const height = Math.ceil((geometry.yMax - geometry.yMin) * emToPixelSize) + 2
+		
+		let buffer = new Uint8Array(width * height)
+		
+		for (let y = 0; y < height; y++)
+		{
+			for (let x = 0; x < width; x++)
+			{
+				let accum = 0
+				for (let yy = yOff + y * mult; yy < yOff + y * mult + mult; yy++)
+				{
+					for (let xx = xOff + x * mult; xx < xOff + x * mult + mult; xx++)
+					{
+						if (xx < 0 || xx >= binaryRender.width || yy < 0 ||  yy >= binaryRender.height)
+							continue
+						
+						accum += (binaryRender.buffer[yy * binaryRender.width + xx] > 0 ? 1 : 0)
+					}
+				}
+				
+				buffer[y * width + x] = Math.max(0, Math.min(255, Math.floor(Math.pow(accum / (mult * mult), 1 / gammaCorrection) * 255)))
 			}
 		}
 		

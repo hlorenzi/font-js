@@ -6,8 +6,8 @@ export function parseGlyphRange(str)
 	{
 		let parser = new Parser(str)
 		
-		if (str == "*")
-			return null
+		if (str == "*" || str == "u+*")
+			return result
 		
 		while (!parser.isOver())
 		{
@@ -54,7 +54,7 @@ class Parser
 {
 	constructor(str)
 	{
-		this.str = str.toLowerCase()
+		this.str = str
 		this.index = 0
 		this.skipWhite()
 	}

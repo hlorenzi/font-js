@@ -5,8 +5,30 @@ export class FontRenderer
 {
 	static renderGlyph(geometry, emToPixelSize)
 	{
+		geometry =
+		{
+			xMin: geometry.xMin || 0,
+			xMax: geometry.xMax || 0,
+			yMin: geometry.yMin || 0,
+			yMax: geometry.yMax || 0,
+			contours: geometry.contours
+		}
+		
 		const width  = Math.ceil((geometry.xMax - geometry.xMin) * emToPixelSize) + 2
 		const height = Math.ceil((geometry.yMax - geometry.yMin) * emToPixelSize) + 2
+		
+		const xEmToPixel = (xEmSpace) =>
+			(xEmSpace - geometry.xMin) / (geometry.xMax - geometry.xMin) * (width - 2) + 1
+			
+		const yEmToPixel = (yEmSpace) =>
+			(yEmSpace - geometry.yMin) / (geometry.yMax - geometry.yMin) * (height - 2) + 1
+		
+		const xMin = xEmToPixel(geometry.xMin) || 0
+		const xMax = xEmToPixel(geometry.xMax) || 0
+		const yMin = yEmToPixel(geometry.yMin) || 0
+		const yMax = yEmToPixel(geometry.yMax) || 0
+		const xOrigin = xEmToPixel(0) || 0
+		const yOrigin = yEmToPixel(0) || 0
 		
 		let buffer = new Uint8Array(width * height)
 		
@@ -52,7 +74,7 @@ export class FontRenderer
 			let currentIntersection = 0
 			for (let x = 0; x < width; x++)
 			{
-				const xEmSpace = geometry.xMin + ((x - 1) / (width  - 2)) * (geometry.xMax - geometry.xMin)
+				const xEmSpace = geometry.xMin + ((x - 1) / (width - 2)) * (geometry.xMax - geometry.xMin)
 				
 				while (currentIntersection < intersectingEdges.length &&
 					intersectingEdges[currentIntersection].xAtCurrentScanline <= xEmSpace)
@@ -65,12 +87,21 @@ export class FontRenderer
 			}
 		}
 		
-		return { width, height, buffer }
+		return { width, height, emToPixelSize, xMin, xMax, yMin, yMax, xOrigin, yOrigin, buffer }
 	}
 	
 	
 	static renderGlyphGrayscale(geometry, emToPixelSize, config = {})
 	{
+		geometry =
+		{
+			xMin: geometry.xMin || 0,
+			xMax: geometry.xMax || 0,
+			yMin: geometry.yMin || 0,
+			yMax: geometry.yMax || 0,
+			contours: geometry.contours
+		}
+		
 		const mult = config.sizeMultiplier || 16
 		const xOff = -mult
 		const yOff = -mult
@@ -80,6 +111,19 @@ export class FontRenderer
 		
 		const width  = Math.ceil((geometry.xMax - geometry.xMin) * emToPixelSize) + 2
 		const height = Math.ceil((geometry.yMax - geometry.yMin) * emToPixelSize) + 2
+		
+		const xEmToPixel = (xEmSpace) =>
+			(xEmSpace - geometry.xMin) / (geometry.xMax - geometry.xMin) * (width - 2) + 1
+			
+		const yEmToPixel = (yEmSpace) =>
+			(yEmSpace - geometry.yMin) / (geometry.yMax - geometry.yMin) * (height - 2) + 1
+		
+		const xMin = xEmToPixel(geometry.xMin) || 0
+		const xMax = xEmToPixel(geometry.xMax) || 0
+		const yMin = yEmToPixel(geometry.yMin) || 0
+		const yMax = yEmToPixel(geometry.yMax) || 0
+		const xOrigin = xEmToPixel(0) || 0
+		const yOrigin = yEmToPixel(0) || 0
 		
 		let buffer = new Uint8Array(width * height)
 		
@@ -103,7 +147,7 @@ export class FontRenderer
 			}
 		}
 		
-		return { width, height, buffer }
+		return { width, height, buffer, emToPixelSize, xMin, xMax, yMin, yMax, xOrigin, yOrigin }
 	}
 	
 	

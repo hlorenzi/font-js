@@ -831,12 +831,12 @@ export class Font
 		
 		geometry.advance = (hMetric ? hMetric.advanceWidth / headTable.unitsPerEm : 0)
 		
-		let updateMeasures = (x, y) =>
+		const updateMeasures = (x, y) =>
 		{
-			geometry.xMin = Math.min(geometry.xMin, x)
-			geometry.xMax = Math.max(geometry.xMax, x)
-			geometry.yMin = Math.min(geometry.yMin, y)
-			geometry.yMax = Math.max(geometry.yMax, y)
+			geometry.xMin = geometry.xMin == null ? x : Math.min(geometry.xMin, x)
+			geometry.xMax = geometry.xMax == null ? x : Math.max(geometry.xMax, x)
+			geometry.yMin = geometry.yMin == null ? y : Math.min(geometry.yMin, y)
+			geometry.yMax = geometry.yMax == null ? y : Math.max(geometry.yMax, y)
 		}
 		
 		if (glyph != null)

@@ -4,61 +4,90 @@ import { parseGlyphRange } from "./glyphRangeParser.mjs"
 import fs from "fs"
 import minimist from "minimist"
 import PNG from "pngjs"
+import path from "path"
 
 
 const usage =
 `
 Usage:
-	font-inspect <FONT-FILE> [options]
+	font-inspect <FONT_FILE> [options]
 
 Options:
-	--glyphs GLYPH_LIST  (default "U+0..U+ff")
+	--glyphs <GLYPH_LIST>  (default "*")
 		The list of glyphs to extract.
 		You can use decimal glyph IDs (#1234), hex Unicode codepoints (U+1abcd), ranges (..), and commas.
-		You can also just use an asterisk (*) to specify all glyphs.
+		You can also use an asterisk (*) to specify all glyphs, and (U+*) to specify all Unicode codepoints.
 		Example: "U+0..U+7f,#500..#650,U+1e000"
 		
-	--mode MODE  (default "png-grayscale")
-		The kind of information to extract from glyphs.
-		Available modes:
+	--img-mode <MODE>  (default "png-grayscale")
+		The image format to which glyphs will be rendered.
+		Available formats:
 		
-		"json"
-			JSON file containing the character mapping, metrics and full geometry data.
-			
-		"json-simplified"
-			JSON file as above but with simplified geometry data consisting only
-			of straight lines.
+		"none"
+			Does not output image files.
 			
 		"png-binary"
-			PNG file with a black-and-white rasterization of the glyph, along with
-			a JSON file as above, with metrics relative to the generated image.
-			
+			PNG file with a black-and-white rasterization of the glyph.
+			Can be combined with the '--use-alpha' option.
+		
 		"png-grayscale"
-			PNG file with a 256-level grayscale rasterization of the glyph, along with
-			a JSON file as above, with metrics relative to the generated image.
+			PNG file with a 256-level grayscale rasterization of the glyph.
+			Can be combined with the '--use-alpha' and '--gamma' options.
 			
-		"png-distance"
-			PNG file with a distance field rasterization of the glyph, along with
-			a JSON file as above, with metrics relative to the generated image.
+	--data-mode <MODE>  (default "none")
+		The data format to which glyph metadata will be extracted.
+		Available formats:
+		
+		"none"
+			Does not output glyph metadata.
 			
-	--out OUTPUT_FILENAME  (default "./glyph[glyphid]")
-		The output filename to use for generated files.
-		The correct file extension will be appended automatically.
-		You can include the following tags to be replaced at output time:
+		"json"
+			JSON file containing character mapping and metrics.
+			
+		"json-full"
+			JSON file containing character mapping, metrics, and full geometry data.
+			
+		"json-simplified"
+			JSON file as above, but with simplified geometry data where curves have been
+			converted to straight lines, using the '--curve-precision' option.
+			
+	--out <FILENAME>  (default "./glyph_[glyphid]")
+		Shortcut for both '--img-out' and '--data-out'.
+		The output filename of each glyph extracted, without the file extension.
+		You can include the following tags, which will automatically be replaced
+		by their respective values:
 		
 		"[glyphid]" Decimal glyph ID of the current glyph, without the # prefix.
 		"[unicode]" Hex Unicode codepoint of the current glyph, without the U+ prefix.
 		
-	--size SIZE  (default 256)
+	--img-out <FILENAME>  (default "./glyph_[glyphid]")
+		The output filename of image files, without the file extension.
+		You can include the same tags as described above in the '--out' option.
+		
+	--data-out <FILENAME>  (default "./glyph_[glyphid]")
+		The output filename of data files, without the file extension.
+		You can include the same tags as described above in the '--out' option.
+		
+	--size <PIXELS>  (default 256)
 		The size of 1 font unit in pixels (usually the height of a line of text)
 		for image generation.
+		
+	--coallesce-unicode
+		For glyphs that map to many Unicode codepoints, export only one entry under
+		the most common codepoint, but specify all codepoints in their data files.
 		
 	--use-alpha
 		Use the alpha channel in generated images, instead of the color channels.
 		
-	--gamma VALUE  (default 2.2)
-		The gamma correction value to divide accumulated color samples for
-		grayscale image outputs.
+	--gamma <VALUE>  (default 2.2)
+		The gamma correction value for grayscale image output.
+		
+	--curve-precision <VALUE>  (default 100)
+		The number of straight segments to which curves will be converted
+		for rendering.
+		
+	--ignore-img-metrics
+		Force use normalized EM units in the data output, disregarding any rendered images.
 `
 
 const exitWithUsage = () =>
@@ -74,63 +103,207 @@ if (opts._.length != 1)
 	exitWithUsage()
 
 const argFontFile = opts._[0]
+const argOut = opts["out"] || "./glyph_[glyphid]"
+const argImgMode = opts["img-mode"] || "png-grayscale"
+const argImgOut = opts["img-out"] || argOut
 const argSize = parseInt(opts.size) || 256
-const argOut = opts.out || "./glyph[glyphid]"
-const argMode = opts.mode || "png-grayscale"
+const argDataMode = opts["data-mode"] || "json"
+const argDataOut = opts["data-out"] || argOut
+const argCoallesceUnicode = !!opts["coallesce-unicode"]
 const argUseAlpha = !!opts["use-alpha"]
 const argGamma = parseFloat(opts.gamma) || 2.2
+const argCurvePrecision = parseInt(opts["curve-precision"]) || 100
+const argIgnoreImgMetrics = !!opts["ignore-img-metrics"]
 
 // Load the font file.
 const bytes = fs.readFileSync(argFontFile)
 const font = Font.fromBytes(bytes)
 
 // Load the glyph list.
-let argGlyphList = parseGlyphRange(opts.glyphs || "*")
-if (!argGlyphList)
+const unicodeMap = font.getUnicodeMap()
+
+const argGlyphs = (opts.glyphs || "*").toLowerCase()
+let argGlyphList = parseGlyphRange(argGlyphs)
+if (argGlyphs == "*")
 {
-	argGlyphList = { unicodeCodepoints: [], glyphIds: [] }
 	for (const id of font.enumerateGlyphIds())
 		argGlyphList.glyphIds.push(id)
 }
+else if (argGlyphs == "u+*")
+{
+	for (const [codepoint, glyphId] of unicodeMap)
+		argGlyphList.unicodeCodepoints.push(codepoint)
+}
 
-// Render glyphs.
+for (const unicodeCodepoint of argGlyphList.unicodeCodepoints)
+{
+	if (unicodeMap.has(unicodeCodepoint))
+		argGlyphList.glyphIds.push(unicodeMap.get(unicodeCodepoint))
+}
+
+argGlyphList.glyphIds = [...new Set(argGlyphList.glyphIds)]
+
+let resolvedGlyphList = []
 for (const glyphId of argGlyphList.glyphIds)
 {
-	console.log("glyph #" + glyphId + "...")
-	
-	//const glyphId = font.getUnicodeMap().get("M".codePointAt(0))
-	const geometry = font.getGlyphGeometry(glyphId, 100)
-	const image =
-		argMode == "png-grayscale" ?
-		FontRenderer.renderGlyphGrayscale(geometry, argSize, { gammaCorrection: argGamma }) :
-		FontRenderer.renderGlyph(geometry, argSize)
-
-	let png = new PNG.PNG({ width: image.width, height: image.height, colorType: 6 })
-	for (let y = 0; y < image.height; y++)
+	if (argCoallesceUnicode)
 	{
-		for (let x = 0; x < image.width; x++)
+		let unicodeCodepoints = []
+		for (const [codepoint, id] of unicodeMap)
 		{
-			const i = (y * image.width + x)
-			
-			if (argUseAlpha)
+			if (glyphId == id)
+				unicodeCodepoints.push(codepoint)
+		}
+		
+		resolvedGlyphList.push(
+		{
+			glyphId,
+			unicodeCodepoints
+		})
+	}
+	else
+	{
+		let hadACodepoint = false
+		for (const [codepoint, id] of unicodeMap)
+		{
+			if (glyphId == id)
 			{
-				png.data[i * 4 + 0] = 255
-				png.data[i * 4 + 1] = 255
-				png.data[i * 4 + 2] = 255
-				png.data[i * 4 + 3] = image.buffer[i]
-			}
-			else
-			{
-				png.data[i * 4 + 0] = image.buffer[i]
-				png.data[i * 4 + 1] = image.buffer[i]
-				png.data[i * 4 + 2] = image.buffer[i]
-				png.data[i * 4 + 3] = 255
+				hadACodepoint = true
+				resolvedGlyphList.push(
+				{
+					glyphId,
+					unicodeCodepoints: [codepoint]
+				})
 			}
 		}
+		
+		if (!hadACodepoint)
+			resolvedGlyphList.push(
+			{
+				glyphId,
+				unicodeCodepoints: []
+			})
+	}
+}
+
+// Render glyphs.
+for (const glyph of resolvedGlyphList)
+{
+	console.log("extracting glyph #" + glyph.glyphId + ": [" + glyph.unicodeCodepoints.map(c => "U+" + c.toString(16)).join(",") + "]...")
+	
+	let renderedImage = null
+	if (argImgMode != "none")
+	{
+		const geometry = font.getGlyphGeometry(glyph.glyphId, argCurvePrecision)
+		
+		renderedImage =
+			argImgMode == "png-grayscale" ?
+			FontRenderer.renderGlyphGrayscale(geometry, argSize, { gammaCorrection: argGamma }) :
+			FontRenderer.renderGlyph(geometry, argSize)
+
+		let png = new PNG.PNG({ width: renderedImage.width, height: renderedImage.height, colorType: 6 })
+		for (let y = 0; y < renderedImage.height; y++)
+		{
+			for (let x = 0; x < renderedImage.width; x++)
+			{
+				const i = (y * renderedImage.width + x)
+				
+				if (argUseAlpha)
+				{
+					png.data[i * 4 + 0] = 255
+					png.data[i * 4 + 1] = 255
+					png.data[i * 4 + 2] = 255
+					png.data[i * 4 + 3] = renderedImage.buffer[i]
+				}
+				else
+				{
+					png.data[i * 4 + 0] = renderedImage.buffer[i]
+					png.data[i * 4 + 1] = renderedImage.buffer[i]
+					png.data[i * 4 + 2] = renderedImage.buffer[i]
+					png.data[i * 4 + 3] = 255
+				}
+			}
+		}
+		
+		const outputFilename = argImgOut
+			.replace(/\[glyphid\]/g, glyph.glyphId.toString())
+			.replace(/\[unicode\]/g, (glyph.unicodeCodepoints.length == 0 ? "" : glyph.unicodeCodepoints[0].toString(16)))
+			
+		fs.writeFileSync(outputFilename + ".png", PNG.PNG.sync.write(png))
 	}
 	
-	let outputFilename = argOut
-		.replace(/\[glyphid\]/, glyphId.toString())
+	if (argDataMode != "none")
+	{
+		const geometry = font.getGlyphGeometry(glyph.glyphId, argDataMode != "json-simplified" ? 0 : argCurvePrecision)
+		geometry.xMin = geometry.xMin || 0
+		geometry.xMax = geometry.xMax || 0
+		geometry.yMin = geometry.yMin || 0
+		geometry.yMax = geometry.yMax || 0
+		geometry.advance = geometry.advance || 0
+		
+		let metrics =
+		{
+			width: geometry.xMax - geometry.xMin,
+			height: geometry.yMax - geometry.yMin,
+			xMin: geometry.xMin,
+			xMax: geometry.xMax,
+			yMin: geometry.yMin,
+			yMax: geometry.yMax,
+			xOrigin: 0,
+			yOrigin: 0,
+			xAdvance: geometry.advance,
+			emToPixels: null,
+		}
+		
+		if (renderedImage && !argIgnoreImgMetrics)
+		{
+			metrics =
+			{
+				width: renderedImage.width,
+				height: renderedImage.height,
+				xMin: renderedImage.xMin,
+				xMax: renderedImage.xMax,
+				yMin: renderedImage.yMin,
+				yMax: renderedImage.yMax,
+				xOrigin: renderedImage.xOrigin,
+				yOrigin: renderedImage.yOrigin,
+				xAdvance: renderedImage.emToPixelSize * geometry.advance,
+				emToPixels: renderedImage.emToPixelSize,
+			}
+		}
+		
+		let json =
+		{
+			...glyph,
+			...metrics,
+		}
+		
+		if (argDataMode != "json")
+			json.contours = geometry.contours
+		
+		const mainUnicodeCodepoint = (glyph.unicodeCodepoints.length == 0 ? null : glyph.unicodeCodepoints[0])
+		
+		const outputFilename = argDataOut
+			.replace(/\[glyphid\]/g, glyph.glyphId.toString())
+			.replace(/\[unicode\]/g, mainUnicodeCodepoint == null ? "" : mainUnicodeCodepoint.toString(16))
+			
+		if (argDataMode != "xml-sprsheet")
+		{			
+			const jsonStr = JSON.stringify(json, null, 4)
+			fs.writeFileSync(outputFilename + ".json", jsonStr)
+		}
+		else
+		{
+			const filenameWithoutFolder = path.basename(outputFilename + ".png")
+			const xml =
+				`<sprite-sheet src="` + filenameWithoutFolder + `">
+					<sprite name="` + mainUnicodeCodepoint.toString(16) + `" x="0" y="0" width="` + metrics.width + `" height="` + metrics.height + `">
+						<guide name="unicode" kind="string" value="` + mainUnicodeCodepoint + `"></guide>
+						<guide name="base-advance" kind="vector"  x1="` + Math.floor(metrics.xOrigin) + `"  x2="` + Math.floor(metrics.xOrigin + metrics.xAdvance) + `"  y1="` + Math.floor(metrics.yOrigin) + `"  y2="` + Math.floor(metrics.yOrigin) + `"></guide>
+					</sprite>
+				</sprite-sheet>`
 
-	fs.writeFileSync(outputFilename + ".png", PNG.PNG.sync.write(png))
+			fs.writeFileSync(outputFilename + ".sprsheet", xml)
+		}
+	}
 }

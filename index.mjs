@@ -27,14 +27,21 @@ Options:
 			Does not output image files.
 			
 		"png-binary"
-			PNG file with a black-and-white rasterization of the glyph.
+			PNG file with a black-and-white rasterization of the glyph,
+			where white corresponds to areas on the inside of contours.
 			Can be combined with the '--use-alpha' option.
 		
 		"png-grayscale"
-			PNG file with a 256-level grayscale rasterization of the glyph.
+			PNG file with a 256-level grayscale rasterization of the glyph,
+			where white corresponds to areas on the inside of contours.
 			Can be combined with the '--use-alpha' and '--gamma' options.
+		
+		"png-sdf"
+			PNG file with a 256-level grayscale signed distance field,
+			mapped to colors using the '--sdf-min' and '--sdf-max' options.
+			Can be combined with the '--use-alpha' option.
 			
-	--data-mode <MODE>  (default "none")
+	--data-mode <MODE>  (default "json")
 		The data format to which glyph metadata will be extracted.
 		Available formats:
 		
@@ -49,7 +56,7 @@ Options:
 			
 		"json-simplified"
 			JSON file as above, but with simplified geometry data where curves have been
-			converted to straight lines, using the '--curve-precision' option.
+			converted to line segments, using the '--curve-precision' option.
 			
 	--out <FILENAME>  (default "./glyph_[glyphid]")
 		Shortcut for both '--img-out' and '--data-out'.
@@ -72,6 +79,14 @@ Options:
 		The size of 1 font unit in pixels (usually the height of a line of text)
 		for image generation.
 		
+	--outline-min <PIXELS>
+	--outline-max <PIXELS>
+		Render glyphs as an outline.
+		
+	--sdf-min <PIXELS>
+	--sdf-max <PIXELS>
+		Distance range for signed distance fields.
+		
 	--coallesce-unicode
 		For glyphs that map to many Unicode codepoints, export only one entry under
 		the most common codepoint, but specify all codepoints in their data files.
@@ -83,7 +98,7 @@ Options:
 		The gamma correction value for grayscale image output.
 		
 	--curve-precision <VALUE>  (default 100)
-		The number of straight segments to which curves will be converted
+		The number of line segments to which curves will be converted
 		for rendering.
 		
 	--ignore-img-metrics
@@ -114,6 +129,11 @@ const argUseAlpha = !!opts["use-alpha"]
 const argGamma = parseFloat(opts.gamma) || 2.2
 const argCurvePrecision = parseInt(opts["curve-precision"]) || 100
 const argIgnoreImgMetrics = !!opts["ignore-img-metrics"]
+
+const argSDFMin = parseFloat(opts["sdf-min"])
+const argSDFMax = parseFloat(opts["sdf-max"])
+const argOutlineMin = parseFloat(opts["outline-min"])
+const argOutlineMax = parseFloat(opts["outline-max"])
 
 // Load the font file.
 const bytes = fs.readFileSync(argFontFile)
@@ -196,10 +216,28 @@ for (const glyph of resolvedGlyphList)
 	{
 		const geometry = font.getGlyphGeometry(glyph.glyphId, argCurvePrecision)
 		
-		renderedImage =
-			argImgMode == "png-grayscale" ?
-			FontRenderer.renderGlyphGrayscale(geometry, argSize, { gammaCorrection: argGamma }) :
-			FontRenderer.renderGlyph(geometry, argSize)
+		renderedImage = FontRenderer.renderGlyph(geometry, argSize * 16)
+		
+		if (argImgMode == "png-sdf")
+		{
+			renderedImage = renderedImage.getWithBorder(argSDFMax * 16)
+			renderedImage = renderedImage.getSignedDistanceField()
+			renderedImage.normalizeSignedDistance(argSDFMin * 16, argSDFMax * 16)
+		}
+		
+		else if (!isNaN(argOutlineMin) && !isNaN(argOutlineMax))
+		{
+			renderedImage = renderedImage.getWithBorder(argOutlineMax * 16)
+			renderedImage = renderedImage.getSignedDistanceField()
+			renderedImage.outline(argOutlineMin * 16, argOutlineMax * 16)
+		}
+		
+		renderedImage = renderedImage.getDownsampled(argImgMode == "png-sdf" ? 1 : argGamma)
+		
+		if (argImgMode == "png-binary")
+			renderedImage.binarize()
+		
+		renderedImage.normalizeColorRange()
 
 		let png = new PNG.PNG({ width: renderedImage.width, height: renderedImage.height, colorType: 6 })
 		for (let y = 0; y < renderedImage.height; y++)
@@ -245,10 +283,6 @@ for (const glyph of resolvedGlyphList)
 		{
 			width: geometry.xMax - geometry.xMin,
 			height: geometry.yMax - geometry.yMin,
-			xMin: geometry.xMin,
-			xMax: geometry.xMax,
-			yMin: geometry.yMin,
-			yMax: geometry.yMax,
 			xOrigin: 0,
 			yOrigin: 0,
 			xAdvance: geometry.advance,
@@ -261,14 +295,10 @@ for (const glyph of resolvedGlyphList)
 			{
 				width: renderedImage.width,
 				height: renderedImage.height,
-				xMin: renderedImage.xMin,
-				xMax: renderedImage.xMax,
-				yMin: renderedImage.yMin,
-				yMax: renderedImage.yMax,
 				xOrigin: renderedImage.xOrigin,
 				yOrigin: renderedImage.yOrigin,
-				xAdvance: renderedImage.emToPixelSize * geometry.advance,
-				emToPixels: renderedImage.emToPixelSize,
+				xAdvance: renderedImage.emScale * geometry.advance,
+				emToPixels: renderedImage.emScale,
 			}
 		}
 		

@@ -1,36 +1,258 @@
 import { Vec2 } from "./vec2.mjs"
 
 
+export class GlyphImage
+{
+	constructor(width, height, emScale, xOrigin, yOrigin)
+	{
+		this.width = width
+		this.height = height
+		this.buffer = new Float32Array(width * height)
+		this.emScale = emScale
+		this.xOrigin = xOrigin
+		this.yOrigin = yOrigin
+	}
+	
+	
+	setPixel(x, y, c)
+	{
+		if (x < 0 || y < 0 || x >= this.width || y >= this.height)
+			return
+		
+		this.buffer[y * this.width + x] = c
+	}
+	
+	
+	getPixel(x, y)
+	{
+		if (x < 0 || y < 0 || x >= this.width || y >= this.height)
+			return 0
+		
+		return this.buffer[y * this.width + x]
+	}
+	
+	
+	mapPixels(fn)
+	{
+		for (let y = 0; y < this.height; y++)
+		for (let x = 0; x < this.width; x++)
+			this.buffer[y * this.width + x] = fn(this.buffer[y * this.width + x])
+	}
+	
+	
+	binarize(cutoff = 0.5)
+	{
+		this.mapPixels(c => c > cutoff ? 1 : 0)
+	}
+	
+	
+	outline(min, max)
+	{
+		this.mapPixels(c => c >= min && c <= max ? 1 : 0)
+	}
+	
+	
+	normalizeColorRange()
+	{
+		this.mapPixels(c => Math.max(0, Math.min(255, Math.floor(c * 255))))
+	}
+	
+	
+	normalizeSignedDistance(rangeMin, rangeMax)
+	{
+		this.mapPixels(c => 1 - (c - rangeMin) / (rangeMax - rangeMin))
+	}
+	
+	
+	getDownsampled(gamma = 2.2)
+	{
+		const newImage = new GlyphImage(Math.floor(this.width / 16), Math.floor(this.height / 16), this.emScale / 16, this.xOrigin / 16, this.yOrigin / 16)
+		
+		for (let y = 0; y < newImage.height; y++)
+		for (let x = 0; x < newImage.width; x++)
+		{
+			let accum = 0
+			for (let yy = 0; yy < 16; yy++)
+			for (let xx = 0; xx < 16; xx++)
+				accum += this.getPixel(x * 16 + xx, y * 16 + yy)
+			
+			newImage.setPixel(x, y, Math.pow(accum / 256, 1 / gamma))
+		}
+		
+		return newImage
+	}
+	
+	
+	getWithBorder(borderSize)
+	{
+		const newImage = new GlyphImage(this.width + borderSize * 2, this.height + borderSize * 2, this.emScale, this.xOrigin + borderSize, this.yOrigin + borderSize)
+		
+		for (let y = 0; y < newImage.height; y++)
+		for (let x = 0; x < newImage.width; x++)
+			newImage.setPixel(x, y, this.getPixel(x - borderSize, y - borderSize))
+		
+		return newImage
+	}
+	
+	
+	getSignedDistanceField()
+	{
+		const calcDist = (obj) => Math.sqrt(obj.dx * obj.dx + obj.dy * obj.dy)
+		const calcDistSqr = (obj) => (obj.dx * obj.dx + obj.dy * obj.dy)
+		
+		const getUnsignedDF = (invert) =>
+		{
+			const distanceBuffer = []
+			for (let y = 0; y < this.height; y++)
+			for (let x = 0; x < this.width; x++)
+				distanceBuffer.push((invert ? this.getPixel(x, y) < 0.5 : this.getPixel(x, y) >= 0.5) ? { dx: 0, dy: 0 } : { dx: Infinity, dy: Infinity })
+			
+			const compare = (dCur, x, y, xOff, yOff) =>
+			{
+				const xx = x + xOff
+				const yy = y + yOff
+				if (xx < 0 || yy < 0 || xx >= this.width || yy >= this.height)
+					return
+				
+				const dOther = distanceBuffer[yy * this.width + xx]
+				const dNew = { dx: dOther.dx + xOff, dy: dOther.dy + yOff }
+				if (calcDistSqr(dNew) < calcDistSqr(dCur))
+				{
+					dCur.dx = dNew.dx
+					dCur.dy = dNew.dy
+				}
+			}
+			
+			for (let y = 0; y < this.height; y++)
+			{
+				for (let x = 0; x < this.width; x++)
+				{
+					const d = distanceBuffer[y * this.width + x]
+					compare(d, x, y, -1,  0)
+					compare(d, x, y,  0, -1)
+					compare(d, x, y, -1, -1)
+					compare(d, x, y,  1, -1)
+					distanceBuffer[y * this.width + x] = d
+				}
+
+				for (let x = this.width - 1; x >= 0; x--)
+				{
+					const d = distanceBuffer[y * this.width + x]
+					compare(d, x, y, 1, 0)
+					distanceBuffer[y * this.width + x] = d
+				}
+			}
+
+			for (let y = this.height - 1; y >= 0; y--)
+			{
+				for (let x = this.width - 1; x >= 0; x--)
+				{
+					const d = distanceBuffer[y * this.width + x]
+					compare(d, x, y,  1, 0)
+					compare(d, x, y,  0, 1)
+					compare(d, x, y, -1, 1)
+					compare(d, x, y,  1, 1)
+					distanceBuffer[y * this.width + x] = d
+				}
+
+				for (let x = 0; x < this.width; x++)
+				{
+					const d = distanceBuffer[y * this.width + x]
+					compare(d, x, y, -1, 0)
+					distanceBuffer[y * this.width + x] = d
+				}
+			}
+			
+			return distanceBuffer
+		}
+		
+		const outsideDF = getUnsignedDF(false)
+		const insideDF = getUnsignedDF(true)
+		
+		const newImage = new GlyphImage(this.width, this.height, this.emScale, this.xOrigin, this.yOrigin)
+		
+		for (let y = 0; y < this.height; y++)
+		for (let x = 0; x < this.width; x++)
+		{
+			const outsideD = calcDist(outsideDF[y * this.width + x])
+			const insideD  = calcDist(insideDF [y * this.width + x])
+			newImage.setPixel(x, y, outsideD <= 0 ? -insideD : outsideD)
+		}
+		
+		return newImage
+	}
+	
+	
+	getSignedDistanceFieldSlow()
+	{
+		const newImage = new GlyphImage(this.width, this.height, this.emScale, this.xOrigin, this.yOrigin)
+		
+		for (let y = 0; y < this.height; y++)
+		for (let x = 0; x < this.width; x++)
+		{
+			let minDist = Infinity
+			
+			const c1 = this.getPixel(x, y)
+			
+			const testPixel = (xx, yy) =>
+			{
+				const dx = xx - x
+				const dy = yy - y
+				const d = dx * dx + dy * dy
+				if (d >= minDist * minDist)
+					return
+					
+				const c2 = this.getPixel(xx, yy)
+				
+				if (c1 < 0.5 && c2 < 0.5)
+					return
+				
+				if (c1 >= 0.5 && c2 >= 0.5)
+					return
+				
+				minDist = Math.sqrt(d)
+			}
+			
+			for (let t = 0; t < Math.max(this.width, this.height) && t < minDist; t++)
+			{
+				for (let yy = -t; yy <= t; yy++)
+				{
+					testPixel(x - t, y + yy)
+					testPixel(x + t, y + yy)
+				}
+				
+				for (let xx = -t; xx <= t; xx++)
+				{
+					testPixel(x + xx, y - t)
+					testPixel(x + xx, y + t)
+				}
+			}
+			
+			const dSigned = (c1 >= 0.5 ? -1 : 1) * minDist
+			newImage.setPixel(x, y, dSigned)
+		}
+		
+		return newImage
+	}
+}
+
+
 export class FontRenderer
 {
 	static renderGlyph(geometry, emToPixelSize)
 	{
-		geometry =
-		{
-			xMin: geometry.xMin || 0,
-			xMax: geometry.xMax || 0,
-			yMin: geometry.yMin || 0,
-			yMax: geometry.yMax || 0,
-			contours: geometry.contours
-		}
+		const snap = (x, s) => Math.floor(x * s) / s
 		
-		const width  = Math.ceil((geometry.xMax - geometry.xMin) * emToPixelSize) + 2
-		const height = Math.ceil((geometry.yMax - geometry.yMin) * emToPixelSize) + 2
+		const glyphEmW = geometry.xMax - geometry.xMin
+		const glyphEmH = geometry.yMax - geometry.yMin
 		
-		const xEmToPixel = (xEmSpace) =>
-			(xEmSpace - geometry.xMin) / (geometry.xMax - geometry.xMin) * (width - 2) + 1
-			
-		const yEmToPixel = (yEmSpace) =>
-			(yEmSpace - geometry.yMin) / (geometry.yMax - geometry.yMin) * (height - 2) + 1
+		const pixelW = snap(Math.ceil(glyphEmW * emToPixelSize) + 48, 16)
+		const pixelH = snap(Math.ceil(glyphEmH * emToPixelSize) + 48, 16)
 		
-		const xMin = xEmToPixel(geometry.xMin) || 0
-		const xMax = xEmToPixel(geometry.xMax) || 0
-		const yMin = yEmToPixel(geometry.yMin) || 0
-		const yMax = yEmToPixel(geometry.yMax) || 0
-		const xOrigin = xEmToPixel(0) || 0
-		const yOrigin = yEmToPixel(0) || 0
+		const pixelOffsetX = Math.ceil(-geometry.xMin * emToPixelSize) + 16
+		const pixelOffsetY = Math.ceil(-geometry.yMin * emToPixelSize) + 16
 		
-		let buffer = new Uint8Array(width * height)
+		const render = new GlyphImage(pixelW, pixelH, emToPixelSize, pixelOffsetX, pixelOffsetY)
 		
 		let intersectingEdges = []
 		for (const contour of geometry.contours)
@@ -51,9 +273,9 @@ export class FontRenderer
 			}
 		}
 		
-		for (let y = 0; y < height; y++)
+		for (let y = 0; y < pixelH; y++)
 		{
-			const yEmSpace = geometry.yMin + ((y - 1) / (height - 2)) * (geometry.yMax - geometry.yMin)
+			const yEmSpace = (y - pixelOffsetY) / emToPixelSize
 			
 			for (let edge of intersectingEdges)
 			{
@@ -72,9 +294,9 @@ export class FontRenderer
 			
 			let currentWinding = 0
 			let currentIntersection = 0
-			for (let x = 0; x < width; x++)
+			for (let x = 0; x < pixelW; x++)
 			{
-				const xEmSpace = geometry.xMin + ((x - 1) / (width - 2)) * (geometry.xMax - geometry.xMin)
+				const xEmSpace = (x - pixelOffsetX) / emToPixelSize
 				
 				while (currentIntersection < intersectingEdges.length &&
 					intersectingEdges[currentIntersection].xAtCurrentScanline <= xEmSpace)
@@ -83,184 +305,10 @@ export class FontRenderer
 					currentIntersection += 1
 				}
 				
-				buffer[y * width + x] = (currentWinding == 0 ? 0 : 255)
+				render.setPixel(x, y, (currentWinding == 0 ? 0 : 1))
 			}
 		}
 		
-		return { width, height, emToPixelSize, xMin, xMax, yMin, yMax, xOrigin, yOrigin, buffer }
-	}
-	
-	
-	static renderGlyphGrayscale(geometry, emToPixelSize, config = {})
-	{
-		geometry =
-		{
-			xMin: geometry.xMin || 0,
-			xMax: geometry.xMax || 0,
-			yMin: geometry.yMin || 0,
-			yMax: geometry.yMax || 0,
-			contours: geometry.contours
-		}
-		
-		const mult = config.sizeMultiplier || 16
-		const xOff = -mult
-		const yOff = -mult
-		const gammaCorrection = config.gammaCorrection || 2.2
-		
-		const binaryRender = FontRenderer.renderGlyph(geometry, emToPixelSize * mult)
-		
-		const width  = Math.ceil((geometry.xMax - geometry.xMin) * emToPixelSize) + 2
-		const height = Math.ceil((geometry.yMax - geometry.yMin) * emToPixelSize) + 2
-		
-		const xEmToPixel = (xEmSpace) =>
-			(xEmSpace - geometry.xMin) / (geometry.xMax - geometry.xMin) * (width - 2) + 1
-			
-		const yEmToPixel = (yEmSpace) =>
-			(yEmSpace - geometry.yMin) / (geometry.yMax - geometry.yMin) * (height - 2) + 1
-		
-		const xMin = xEmToPixel(geometry.xMin) || 0
-		const xMax = xEmToPixel(geometry.xMax) || 0
-		const yMin = yEmToPixel(geometry.yMin) || 0
-		const yMax = yEmToPixel(geometry.yMax) || 0
-		const xOrigin = xEmToPixel(0) || 0
-		const yOrigin = yEmToPixel(0) || 0
-		
-		let buffer = new Uint8Array(width * height)
-		
-		for (let y = 0; y < height; y++)
-		{
-			for (let x = 0; x < width; x++)
-			{
-				let accum = 0
-				for (let yy = yOff + y * mult; yy < yOff + y * mult + mult; yy++)
-				{
-					for (let xx = xOff + x * mult; xx < xOff + x * mult + mult; xx++)
-					{
-						if (xx < 0 || xx >= binaryRender.width || yy < 0 ||  yy >= binaryRender.height)
-							continue
-						
-						accum += (binaryRender.buffer[yy * binaryRender.width + xx] > 0 ? 1 : 0)
-					}
-				}
-				
-				buffer[y * width + x] = Math.max(0, Math.min(255, Math.floor(Math.pow(accum / (mult * mult), 1 / gammaCorrection) * 255)))
-			}
-		}
-		
-		return { width, height, buffer, emToPixelSize, xMin, xMax, yMin, yMax, xOrigin, yOrigin }
-	}
-	
-	
-	static renderGlyphBySignedDistance(geometry, emToPixelSize)
-	{
-		const width  = Math.ceil((geometry.xMax - geometry.xMin) * emToPixelSize) + 2
-		const height = Math.ceil((geometry.yMax - geometry.yMin) * emToPixelSize) + 2
-		
-		console.log("===")
-		for (const contour of geometry.contours)
-		{
-			contour.winding = FontRenderer.windingValueForContour(contour)
-			console.log(contour.winding)
-		}
-		
-		let buffer = new Array(width * height).fill(255)
-		
-		for (let y = 0; y < height; y++)
-		{
-			for (let x = 0; x < width; x++)
-			{
-				const xEmSpace = geometry.xMin + ((x - 1) / (width  - 2)) * (geometry.xMax - geometry.xMin)
-				const yEmSpace = geometry.yMin + ((y - 1) / (height - 2)) * (geometry.yMax - geometry.yMin)
-				
-				let distancesToContours = []
-				let posDist = Infinity
-				let negDist = -Infinity
-				
-				for (let c = 0; c < geometry.contours.length; c++)
-				{
-					const contour = geometry.contours[c]
-					
-					let minDistance = Infinity
-					let minParam = 1
-					for (const segment of contour)
-					{
-						const d = FontRenderer.signedDistanceToEdge(segment, xEmSpace, yEmSpace)
-						if (Math.abs(d.dist) < Math.abs(minDistance) || (Math.abs(d.dist) == Math.abs(minDistance) && d.param < minParam))
-						{
-							minDistance = d.dist
-							minParam = d.param
-						}
-					}
-					
-					distancesToContours[c] = minDistance
-					
-					if (contour.winding > 0 && minDistance >= 0 && Math.abs(minDistance) < Math.abs(posDist))
-						posDist = minDistance
-					if (contour.winding < 0 && minDistance <= 0 && Math.abs(minDistance) < Math.abs(negDist))
-						negDist = minDistance
-				}
-				
-				let finalDist = Infinity
-				let finalWinding = 0
-				
-				if (posDist >= 0 && Math.abs(posDist) <= Math.abs(negDist))
-				{
-					finalDist = posDist
-					finalWinding = 1
-					for (let c = 0; c < geometry.contours.length; c++)
-						if (geometry.contours[c].winding > 0 && distancesToContours[c] > finalDist && Math.abs(distancesToContours[c]) < Math.abs(negDist))
-							finalDist = distancesToContours[c]
-				}
-				else if (negDist <= 0 && Math.abs(negDist) <= Math.abs(posDist))
-				{
-					finalDist = posDist
-					finalWinding = -1
-					for (let c = 0; c < geometry.contours.length; c++)
-						if (geometry.contours[c].winding < 0 && distancesToContours[c] < finalDist && Math.abs(distancesToContours[c]) < Math.abs(posDist))
-							finalDist = distancesToContours[c]
-				}
-				
-				for (let c = 0; c < geometry.contours.length; c++)
-					if (geometry.contours[c].winding != finalWinding && Math.abs(distancesToContours[c]) < Math.abs(finalDist))
-						finalDist = distancesToContours[c]
-				
-				buffer[y * width + x] = finalDist / 0.1 + 0.5
-			}
-		}
-		
-		return { width, height, buffer }
-	}
-	
-	
-	static windingValueForContour(contour)
-	{
-		// From https://github.com/Chlumsky/msdfgen/blob/master/core/Contour.cpp
-		const shoelace = (edge) => (edge.x2 - edge.x1) * (edge.y1 + edge.y2)
-		
-		let winding = 0
-		for (const edge of contour)
-			winding += shoelace(edge)
-		
-		return winding > 0 ? 1 : winding < 0 ? -1 : 0
-	}
-	
-	
-	static signedDistanceToEdge(edge, x, y)
-	{
-		const edgeVec = new Vec2(edge.x2 - edge.x1, edge.y2 - edge.y1)
-		const posVec = new Vec2(x - edge.x1, y - edge.y1)
-		
-		const normalVec = edgeVec.clockwisePerpendicular()
-		const isInside = normalVec.dot(posVec) <= 0
-		const isInsideSign = (isInside ? -1 : 1)
-		
-		const projectionFactor = posVec.projectionFactor(edgeVec)
-		
-		if (projectionFactor <= 0)
-			return { dist: posVec.sub(new Vec2(edge.x1, edge.y1)).magn() * isInside, param: Math.abs(edgeVec.dot(new Vec2(edge.x1, edge.y1).sub(new Vec2(x, y)))) }
-		else if (projectionFactor >= 1)
-			return { dist: posVec.sub(new Vec2(edge.x2, edge.y2)).magn() * isInside, param: Math.abs(edgeVec.dot(new Vec2(edge.x2, edge.y2).sub(new Vec2(x, y)))) }
-		else
-			return { dist: posVec.project(edgeVec).sub(posVec).magn() * isInside, param: 0 }
+		return render
 	}
 }

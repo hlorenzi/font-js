@@ -1,4 +1,4 @@
-import { ByteReader } from "./byteReader.mjs"
+import { BufferReader } from "@hlorenzi/buffer"
 
 
 export class FontCollection
@@ -12,7 +12,7 @@ export class FontCollection
 	
 	static fromBytes(bytes, preparseGlyphs = false)
 	{
-		return Font.fromReader(new ByteReader(bytes), preparseGlyphs)
+		return FontCollection.fromReader(new BufferReader(bytes), preparseGlyphs)
 	}
 	
 	
@@ -25,8 +25,10 @@ export class FontCollection
 		
 		for (let offset of fontCollection.offsetTables)
 		{
-			r.seek(offset)
-			fontCollection.fonts.push(Font.fromReader(r.clone(), preparseGlyphs))			
+			const rCloned = new BufferReader(r.bytes)
+			rCloned.seek(offset)
+			
+			fontCollection.fonts.push(Font.fromReader(rCloned, preparseGlyphs))			
 		}
 		
 		return fontCollection
@@ -46,16 +48,16 @@ export class FontCollection
 		if (tag == "ttcf")
 		{
 			this.ttcTag = tag
-			this.majorVersion = r.readUInt16BE()
-			this.minorVersion = r.readUInt16BE()
-			this.numFonts = r.readUInt32BE()
-			this.offsetTables = r.readManyUInt32BE(this.numFonts)
+			this.majorVersion = r.readUint16BE()
+			this.minorVersion = r.readUint16BE()
+			this.numFonts = r.readUint32BE()
+			this.offsetTables = r.readManyUint32BE(this.numFonts)
 			
 			if (this.majorVersion == 2)
 			{
-				this.dsigTag = r.readUInt32BE()
-				this.dsigLength = r.readUInt32BE()
-				this.dsigOffset = r.readUInt32BE()
+				this.dsigTag = r.readUint32BE()
+				this.dsigLength = r.readUint32BE()
+				this.dsigOffset = r.readUint32BE()
 			}
 		}
 		else
@@ -76,7 +78,7 @@ export class Font
 	
 	static fromBytes(bytes, preparseGlyphs = false)
 	{
-		return Font.fromReader(new ByteReader(bytes), preparseGlyphs)
+		return Font.fromReader(new BufferReader(bytes), preparseGlyphs)
 	}
 	
 	
@@ -132,6 +134,12 @@ export class Font
 	}
 	
 	
+	getGlyphIndexForUnicode(unicode)
+	{
+		return this.getUnicodeMap().get(unicode)
+	}
+	
+	
 	getUnicodeMap()
 	{
 		const cmapTable = this.getTable("cmap")
@@ -166,10 +174,10 @@ export class Font
 	readOffsetTable(r)
 	{
 		this.sfntVersion   = r.readAsciiLength(4)
-		this.numTables     = r.readUInt16BE()
-		this.searchRange   = r.readUInt16BE()
-		this.entrySelector = r.readUInt16BE()
-		this.rangeShift    = r.readUInt16BE()
+		this.numTables     = r.readUint16BE()
+		this.searchRange   = r.readUint16BE()
+		this.entrySelector = r.readUint16BE()
+		this.rangeShift    = r.readUint16BE()
 	}
 	
 	
@@ -181,9 +189,9 @@ export class Font
 		{
 			let table = { }
 			table.tableTag = r.readAsciiLength(4)
-			table.checkSum = r.readUInt32BE()
-			table.offset   = r.readUInt32BE()
-			table.length   = r.readUInt32BE()
+			table.checkSum = r.readUint32BE()
+			table.offset   = r.readUint32BE()
+			table.length   = r.readUint32BE()
 			
 			this.tables.push(table)
 		}
@@ -196,25 +204,27 @@ export class Font
 		
 		r.seek(table.offset)
 		
-		table.majorVersion = r.readUInt16BE()
-		table.minorVersion = r.readUInt16BE()
-		table.fontRevision = r.readUInt32BE()
+		table.majorVersion = r.readUint16BE()
+		table.minorVersion = r.readUint16BE()
+		table.fontRevision = r.readUint32BE()
 		
-		table.checkSumAdjustment = r.readUInt32BE()
-		table.magicNumber = r.readUInt32BE()
-		table.flags = r.readUInt16BE()
-		table.unitsPerEm = r.readUInt16BE()
+		table.checkSumAdjustment = r.readUint32BE()
+		table.magicNumber = r.readUint32BE()
+		table.flags = r.readUint16BE()
+		table.unitsPerEm = r.readUint16BE()
 		
-		table.created  = r.readUInt64BE()
-		table.modified = r.readUInt64BE()
+		table.createdHi = r.readUint32BE()
+		table.createdLo = r.readUint32BE()
+		table.modifiedHi = r.readUint32BE()
+		table.modifiedLo = r.readUint32BE()
 		
 		table.xMin = r.readInt16BE()
 		table.yMin = r.readInt16BE()
 		table.xMax = r.readInt16BE()
 		table.yMax = r.readInt16BE()
 		
-		table.macStyle = r.readUInt16BE()
-		table.lowestRecPPEM = r.readUInt16BE()
+		table.macStyle = r.readUint16BE()
+		table.lowestRecPPEM = r.readUint16BE()
 		table.fontDirectionHint = r.readInt16BE()
 		table.indexToLocFormat = r.readInt16BE()
 		table.glyphDataFormat = r.readInt16BE()
@@ -230,40 +240,40 @@ export class Font
 		
 		r.seek(table.offset)
 		
-		table.format = r.readUInt16BE()
-		table.count = r.readUInt16BE()
-		table.stringOffset = r.readUInt16BE()
+		table.format = r.readUint16BE()
+		table.count = r.readUint16BE()
+		table.stringOffset = r.readUint16BE()
 		
 		table.nameRecords = []
 		for (let i = 0; i < table.count; i++)
 		{
 			let nameRecord = { }
-			nameRecord.platformID = r.readUInt16BE()
-			nameRecord.encodingID = r.readUInt16BE()
-			nameRecord.languageID = r.readUInt16BE()
-			nameRecord.nameID = r.readUInt16BE()
-			nameRecord.length = r.readUInt16BE()
-			nameRecord.offset = r.readUInt16BE()
+			nameRecord.platformID = r.readUint16BE()
+			nameRecord.encodingID = r.readUint16BE()
+			nameRecord.languageID = r.readUint16BE()
+			nameRecord.nameID = r.readUint16BE()
+			nameRecord.length = r.readUint16BE()
+			nameRecord.offset = r.readUint16BE()
 			nameRecord.string = null
 			table.nameRecords.push(nameRecord)
 		}
 		
 		if (table.format == 1)
 		{
-			table.langTagCount = r.readUInt16BE()
+			table.langTagCount = r.readUint16BE()
 			
 			table.langTagRecords = []
 			for (let i = 0; i < table.langTagCount; i++)
 			{
 				let langTagRecord = { }
-				langTagRecord.length = r.readUInt16BE()
-				langTagRecord.offset = r.readUInt16BE()
+				langTagRecord.length = r.readUint16BE()
+				langTagRecord.offset = r.readUint16BE()
 				langTagRecord.string = null
 				table.langTagRecords.push(langTagRecord)
 			}
 		}
 		
-		const stringDataOffset = r.getPosition()
+		const stringDataOffset = r.head
 		
 		for (let nameRecord of table.nameRecords)
 		{
@@ -271,7 +281,7 @@ export class Font
 				(nameRecord.platformID == 3 && nameRecord.encodingID == 1))
 			{			
 				r.seek(stringDataOffset + nameRecord.offset)
-				nameRecord.string = r.readUTF16BELength(nameRecord.length / 2)
+				nameRecord.string = r.readUtf16BELength(nameRecord.length / 2)
 			}
 		}
 		
@@ -313,14 +323,14 @@ export class Font
 		
 		r.seek(table.offset)
 		
-		table.majorVersion = r.readUInt16BE()
-		table.minorVersion = r.readUInt16BE()
+		table.majorVersion = r.readUint16BE()
+		table.minorVersion = r.readUint16BE()
 		
 		table.ascender  = r.readInt16BE()
 		table.descender = r.readInt16BE()
 		table.lineGap   = r.readInt16BE()
 		
-		table.advanceWidthMax = r.readUInt16BE()
+		table.advanceWidthMax = r.readUint16BE()
 		
 		table.minLeftSideBearing  = r.readInt16BE()
 		table.minRightSideBearing = r.readInt16BE()
@@ -338,7 +348,7 @@ export class Font
 		
 		table.metricDataFormat = r.readInt16BE()
 		
-		table.numberOfHMetrics = r.readUInt16BE()
+		table.numberOfHMetrics = r.readUint16BE()
 	}
 	
 	
@@ -354,7 +364,7 @@ export class Font
 		for (let i = 0; i < hhea.numberOfHMetrics; i++)
 		{
 			let hMetric = { }
-			hMetric.advanceWidth = r.readUInt16BE()
+			hMetric.advanceWidth = r.readUint16BE()
 			hMetric.lsb = r.readInt16BE()
 			
 			hmtx.hMetrics.push(hMetric)
@@ -372,30 +382,30 @@ export class Font
 		
 		if (!this.usesTrueTypeOutlines)
 		{
-			table.version = r.readUInt32BE()
+			table.version = r.readUint32BE()
 			this.warnIf(table.version != 0x5000, "invalid `maxp` version")
 			
-			table.numGlyphs = r.readUInt16BE()
+			table.numGlyphs = r.readUint16BE()
 		}
 		else
 		{
-			table.version = r.readUInt32BE()
+			table.version = r.readUint32BE()
 			this.warnIf(table.version != 0x10000, "invalid `maxp` version")
 				
-			table.numGlyphs = r.readUInt16BE()
-			table.maxPoints = r.readUInt16BE()
-			table.maxContours = r.readUInt16BE()
-			table.maxCompositePoints = r.readUInt16BE()
-			table.maxCompositeContours = r.readUInt16BE()
-			table.maxZones = r.readUInt16BE()
-			table.maxTwilightPoints = r.readUInt16BE()
-			table.maxStorage = r.readUInt16BE()
-			table.maxFunctionDefs = r.readUInt16BE()
-			table.maxInstructionDefs = r.readUInt16BE()
-			table.maxStackElements = r.readUInt16BE()
-			table.maxSizeOfInstructions = r.readUInt16BE()
-			table.maxComponentElements = r.readUInt16BE()
-			table.maxComponentDepth = r.readUInt16BE()
+			table.numGlyphs = r.readUint16BE()
+			table.maxPoints = r.readUint16BE()
+			table.maxContours = r.readUint16BE()
+			table.maxCompositePoints = r.readUint16BE()
+			table.maxCompositeContours = r.readUint16BE()
+			table.maxZones = r.readUint16BE()
+			table.maxTwilightPoints = r.readUint16BE()
+			table.maxStorage = r.readUint16BE()
+			table.maxFunctionDefs = r.readUint16BE()
+			table.maxInstructionDefs = r.readUint16BE()
+			table.maxStackElements = r.readUint16BE()
+			table.maxSizeOfInstructions = r.readUint16BE()
+			table.maxComponentElements = r.readUint16BE()
+			table.maxComponentDepth = r.readUint16BE()
 		}
 	}
 	
@@ -411,10 +421,10 @@ export class Font
 		r.seek(locaTable.offset)
 		
 		if (headTable.indexToLocFormat == 0)
-			locaTable.offsets = r.readManyUInt16BE(locaEntryNum).map(i => i * 2)
+			locaTable.offsets = r.readManyUint16BE(locaEntryNum).map(i => i * 2)
 		
 		else if (headTable.indexToLocFormat == 1)
-			locaTable.offsets = r.readManyUInt32BE(locaEntryNum)
+			locaTable.offsets = r.readManyUint32BE(locaEntryNum)
 		
 		for (let i = 1; i < locaTable.offsets.length; i++)
 		{
@@ -474,15 +484,15 @@ export class Font
 	
 	readGlyphSimple(r, glyph)
 	{
-		glyph.endPtsOfContours = r.readManyUInt16BE(glyph.numberOfContours)
+		glyph.endPtsOfContours = r.readManyUint16BE(glyph.numberOfContours)
 		for (let i = 1; i < glyph.endPtsOfContours.length; i++)
 		{
 			if (glyph.endPtsOfContours[i] < glyph.endPtsOfContours[i - 1])
 				throw "invalid glyph endPtsOfContours entry"
 		}
 		
-		glyph.instructionLength = r.readUInt16BE()
-		glyph.instructions = r.readManyBytes(glyph.instructionLength)
+		glyph.instructionLength = r.readUint16BE()
+		glyph.instructions = r.readManyUint8(glyph.instructionLength)
 		
 		const numPoints = glyph.endPtsOfContours[glyph.numberOfContours - 1] + 1
 		
@@ -497,12 +507,12 @@ export class Font
 		
 		while (glyph.flags.length < numPoints)
 		{
-			const flag = r.readByte()
+			const flag = r.readUint8()
 			glyph.flags.push(flag)
 			
 			if ((flag & REPEAT_FLAG) != 0)
 			{
-				const repeatCount = r.readByte()
+				const repeatCount = r.readUint8()
 				for (let i = 0; i < repeatCount; i++)
 					glyph.flags.push(flag)
 			}
@@ -518,7 +528,7 @@ export class Font
 			
 			if ((flag & X_SHORT_VECTOR_FLAG) != 0)
 			{
-				const displacement = r.readByte()
+				const displacement = r.readUint8()
 				const sign = (flag & X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR_FLAG) != 0 ? 1 : -1
 				xCurrent += displacement * sign
 			}
@@ -539,7 +549,7 @@ export class Font
 			
 			if ((flag & Y_SHORT_VECTOR_FLAG) != 0)
 			{
-				const displacement = r.readByte()
+				const displacement = r.readUint8()
 				const sign = (flag & Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR_FLAG) != 0 ? 1 : -1
 				yCurrent += displacement * sign
 			}
@@ -569,8 +579,8 @@ export class Font
 			let component = { }
 			glyph.components.push(component)
 			
-			component.flags = r.readUInt16BE()
-			component.glyphIndex = r.readUInt16BE()
+			component.flags = r.readUint16BE()
+			component.glyphIndex = r.readUint16BE()
 			
 			component.xScale = 1
 			component.yScale = 1
@@ -584,8 +594,8 @@ export class Font
 			}
 			else
 			{
-				component.argument1 = r.readSByte()
-				component.argument2 = r.readSByte()
+				component.argument1 = r.readInt8()
+				component.argument2 = r.readInt8()
 			}
 			
 			if ((component.flags & ARGS_ARE_XY_VALUES_FLAG) == 0)
@@ -628,8 +638,8 @@ export class Font
 		
 		r.seek(cmapTable.offset)
 		
-		cmapTable.version = r.readUInt16BE()
-		cmapTable.numTables = r.readUInt16BE()
+		cmapTable.version = r.readUint16BE()
+		cmapTable.numTables = r.readUint16BE()
 		
 		cmapTable.encodingRecords = []
 		
@@ -637,9 +647,9 @@ export class Font
 		{
 			let encodingRecord = { }
 			
-			encodingRecord.platformID = r.readUInt16BE()
-			encodingRecord.encodingID = r.readUInt16BE()
-			encodingRecord.offset = r.readUInt32BE()
+			encodingRecord.platformID = r.readUint16BE()
+			encodingRecord.encodingID = r.readUint16BE()
+			encodingRecord.offset = r.readUint32BE()
 			encodingRecord.subtable = null
 			
 			cmapTable.encodingRecords.push(encodingRecord)
@@ -652,7 +662,7 @@ export class Font
 			encodingRecord.subtable = { }
 			encodingRecord.subtable.unicodeToGlyphMap = new Map()
 			
-			encodingRecord.subtable.format = r.readUInt16BE()
+			encodingRecord.subtable.format = r.readUint16BE()
 			
 			switch (encodingRecord.subtable.format)
 			{
@@ -687,22 +697,22 @@ export class Font
 	
 	readCharacterToGlyphIndexMappingEncodingSubtableFormat4(r, subtable)
 	{
-		subtable.length = r.readUInt16BE()
-		subtable.language = r.readUInt16BE()
-		subtable.segCountX2 = r.readUInt16BE()
-		subtable.searchRange = r.readUInt16BE()
-		subtable.entrySelector = r.readUInt16BE()
-		subtable.rangeShift = r.readUInt16BE()
+		subtable.length = r.readUint16BE()
+		subtable.language = r.readUint16BE()
+		subtable.segCountX2 = r.readUint16BE()
+		subtable.searchRange = r.readUint16BE()
+		subtable.entrySelector = r.readUint16BE()
+		subtable.rangeShift = r.readUint16BE()
 		
-		subtable.endCode = r.readManyUInt16BE(subtable.segCountX2 / 2)
+		subtable.endCode = r.readManyUint16BE(subtable.segCountX2 / 2)
 		
-		subtable.reservedPad = r.readUInt16BE()
+		subtable.reservedPad = r.readUint16BE()
 		
-		subtable.startCode = r.readManyUInt16BE(subtable.segCountX2 / 2)
+		subtable.startCode = r.readManyUint16BE(subtable.segCountX2 / 2)
 		subtable.idDelta = r.readManyInt16BE(subtable.segCountX2 / 2)
 		
-		const idRangeOffsetPosition = r.getPosition()
-		subtable.idRangeOffset = r.readManyUInt16BE(subtable.segCountX2 / 2)
+		const idRangeOffsetPosition = r.head
+		subtable.idRangeOffset = r.readManyUint16BE(subtable.segCountX2 / 2)
 		
 		for (let c = 0; c <= 0xffff; c++)
 		{
@@ -728,7 +738,7 @@ export class Font
 						
 					r.seek(addr)
 					
-					let glyphId = r.readUInt16BE()
+					let glyphId = r.readUint16BE()
 					if (glyphId != 0)
 						glyphId = (glyphId + subtable.idDelta[i]) % 0x10000
 					
@@ -743,18 +753,18 @@ export class Font
 	
 	readCharacterToGlyphIndexMappingEncodingSubtableFormat12(r, subtable)
 	{
-		subtable.reserved = r.readUInt16BE()
-		subtable.length = r.readUInt32BE()
-		subtable.language = r.readUInt32BE()
-		subtable.numGroups = r.readUInt32BE()
+		subtable.reserved = r.readUint16BE()
+		subtable.length = r.readUint32BE()
+		subtable.language = r.readUint32BE()
+		subtable.numGroups = r.readUint32BE()
 		
 		subtable.groups = []
 		for (let i = 0; i < subtable.numGroups; i++)
 		{
 			let group = { }
-			group.startCharCode = r.readUInt32BE()
-			group.endCharCode = r.readUInt32BE()
-			group.startGlyphID = r.readUInt32BE()
+			group.startCharCode = r.readUint32BE()
+			group.endCharCode = r.readUint32BE()
+			group.startGlyphID = r.readUint32BE()
 			
 			subtable.groups.push(group)
 		}
@@ -769,7 +779,7 @@ export class Font
 	
 	readF2Dot14(r)
 	{
-		const raw = r.readUInt16BE()
+		const raw = r.readUint16BE()
 		
 		const rawIntegerPart = (raw & 0xc000) >> 14
 		const rawFractionalPart = (raw & 0x3fff)

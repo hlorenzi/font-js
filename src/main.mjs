@@ -1,6 +1,5 @@
 import { ByteReader } from "./byteReader.mjs"
-import { Font, FontCollection } from "./font.mjs"
-import { FontRenderer } from "./fontRenderer.mjs"
+import { Font, FontCollection, GlyphRenderer } from "../index"
 
 
 let gFontCollection = null
@@ -225,7 +224,7 @@ function renderGlyphGeometryCustom(ctx, geometry, lineMetrics, drawMetrics)
 	if (geometry == null)
 		return
 	
-	const img = FontRenderer.renderGlyph(Font.simplifyBezierContours(geometry), 90, 0)
+	const img = GlyphRenderer.render(Font.simplifyBezierContours(geometry), 90)
 
 	ctx.fillStyle = "#f00"
 	for (let y = 0; y < 100; y++)

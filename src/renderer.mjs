@@ -1,13 +1,10 @@
-import { Vec2 } from "./vec2.mjs"
-
-
 export class GlyphImage
 {
 	constructor(width, height, emScale, xOrigin, yOrigin)
 	{
 		this.width = width
 		this.height = height
-		this.buffer = new Float32Array(width * height)
+		this.buffer = new Float64Array(width * height)
 		this.emScale = emScale
 		this.xOrigin = xOrigin
 		this.yOrigin = yOrigin
@@ -92,6 +89,73 @@ export class GlyphImage
 			newImage.setPixel(x, y, this.getPixel(x - borderSize, y - borderSize))
 		
 		return newImage
+	}
+	
+	
+	crop(wNew, hNew, xFrom, yFrom)
+	{
+		const newImage = new GlyphImage(wNew, hNew, this.emScale, this.xOrigin + xFrom, this.yOrigin + yFrom)
+		
+		for (let y = 0; y < newImage.height; y++)
+		for (let x = 0; x < newImage.width; x++)
+			newImage.setPixel(x, y, this.getPixel(x + xFrom, y + yFrom))
+		
+		return newImage
+	}
+	
+	
+	cropped()
+	{
+		let found = false
+		
+		let xMin = 0
+		for (let x = 0; x < this.width && !found; x++)
+		{
+			xMin = x
+			for (let y = 0; y < this.height && !found; y++)
+			{
+				if (this.getPixel(x, y) > 0)
+					found = true
+			}
+		}
+		
+		found = false
+		let xMax = this.width - 1
+		for (let x = this.width - 1; x >= 0 && !found; x--)
+		{
+			xMax = x
+			for (let y = 0; y < this.height && !found; y++)
+			{
+				if (this.getPixel(x, y) > 0)
+					found = true
+			}
+		}
+		
+		found = false
+		let yMin = 0
+		for (let y = 0; y < this.height && !found; y++)
+		{
+			yMin = y
+			for (let x = 0; x < this.width && !found; x++)
+			{
+				if (this.getPixel(x, y) > 0)
+					found = true
+			}
+		}
+		
+		found = false
+		let yMax = this.height - 1
+		for (let y = this.height - 1; y >= 0 && !found; y--)
+		{
+			yMax = y
+			for (let x = 0; x < this.width && !found; x++)
+			{
+				if (this.getPixel(x, y) > 0)
+					found = true
+			}
+		}
+		
+		return this.crop(xMax + 1 - xMin, yMax + 1 - yMin, xMin, yMin)
 	}
 	
 	
@@ -234,13 +298,42 @@ export class GlyphImage
 		
 		return newImage
 	}
+	
+	
+	printToString()
+	{
+		let str = ""
+		for (let y = 0; y < this.height; y++)
+		{
+			for (let x = 0; x < this.width; x++)
+			{
+				const c = this.getPixel(x, y)
+				
+				if (c > 0.8) str += "█"
+				else if (c > 0.6) str += "▓"
+				else if (c > 0.4) str += "▒"
+				else if (c > 0.2) str += "░"
+				else str += " "
+			}
+			
+			if (y < this.height - 1)
+				str += "\n"
+		}
+		
+		return str
+	}
 }
 
 
-export class FontRenderer
+export class GlyphRenderer
 {
-	static renderGlyph(geometry, emToPixelSize)
+	static render(geometry, emToPixelSize)
 	{
+		for (const contour of geometry.contours)
+		for (const edge of contour)
+			if (edge.kind != "line")
+				throw "can only render geometries consisting of straight lines; try using the `simplifySteps` argument of `Font#getGlyphGeometry`"
+		
 		const snap = (x, s) => Math.floor(x * s) / s
 		
 		const glyphEmW = geometry.xMax - geometry.xMin
@@ -286,7 +379,7 @@ export class FontRenderer
 					continue
 				}
 				
-				edge.xAtCurrentScanline = edge.x1 + (yEmSpace - edge.y1) / (edge.y2 - edge.y1) * (edge.x2 - edge.x1)
+				edge.xAtCurrentScanline = edge.x1 + ((yEmSpace - edge.y1) / (edge.y2 - edge.y1)) * (edge.x2 - edge.x1)
 				edge.winding = (edge.y2 > edge.y1) ? 1 : -1
 			}
 			

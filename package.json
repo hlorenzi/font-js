@@ -1,23 +1,30 @@
 {
-  "name": "font-inspect",
-  "version": "0.1.0",
-  "description": "",
+  "name": "@hlorenzi/font",
+  "version": "1.0.0",
+  "description": "Utilities and a CLI for extracting glyphs and metadata from font files.",
+  "repository": "github:hlorenzi/font-js",
+  "homepage": "https://github.com/hlorenzi/font-js#readme",
+  "bugs": "https://github.com/hlorenzi/font-js/issues",
+  "keywords": [
+    "font",
+    "glyph",
+    "extract",
+    "ttf",
+    "otf"
+  ],
+  "type": "module",
   "main": "index.js",
-  "private": true,
   "scripts": {
-    "start": "node --experimental-modules index.mjs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node --experimental-modules cli.mjs",
+    "test": "node --experimental-modules test.mjs"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/hlorenzi/font-inspect.git"
+  "author": "hlorenzi",
+  "license": "ISC",
+  "bin": {
+    "fontx": "cli.mjs"
   },
-  "author": "",
-  "bugs": {
-    "url": "https://github.com/hlorenzi/font-inspect/issues"
-  },
-  "homepage": "https://github.com/hlorenzi/font-inspect#readme",
   "dependencies": {
+    "@hlorenzi/buffer": "^1.1.0",
     "minimist": "^1.2.0",
     "pngjs": "^3.3.3"
   }

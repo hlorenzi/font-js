@@ -1,5 +1,5 @@
-import { ByteReader } from "./byteReader.mjs"
-import { Font, FontCollection, GlyphRenderer } from "../index"
+import { BufferReader } from "@hlorenzi/buffer"
+import { Font, FontCollection, GlyphRenderer } from "../index.js"
 
 
 let gFontCollection = null
@@ -23,9 +23,7 @@ document.getElementById("checkboxCustomRender").onchange = () => refresh()
 
 function loadFont(buffer)
 {
-	let r = new ByteReader(buffer)
-	
-	try { gFontCollection = FontCollection.fromReader(r) }
+	try { gFontCollection = FontCollection.fromBytes(buffer) }
 	catch (e)
 	{
 		window.alert("Error loading font!")

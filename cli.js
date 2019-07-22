@@ -1,8 +1,8 @@
 #!/usr/bin/env node --experimental-modules
 
 
-import { FontCollection, Font, GlyphRenderer } from "./index"
-import { parseGlyphRange } from "./src/glyphRangeParser"
+import { FontCollection, Font, GlyphRenderer } from "./index.js"
+import { parseGlyphRange } from "./src/glyphRangeParser.js"
 import fs from "fs"
 import minimist from "minimist"
 import PNG from "pngjs"

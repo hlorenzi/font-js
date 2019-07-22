@@ -1,6 +1,6 @@
 {
   "name": "@hlorenzi/font",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Utilities and a CLI for extracting glyphs and metadata from font files.",
   "repository": "github:hlorenzi/font-js",
   "homepage": "https://github.com/hlorenzi/font-js#readme",
@@ -10,22 +10,27 @@
     "glyph",
     "extract",
     "ttf",
-    "otf"
+    "otf",
+    "cli"
   ],
   "type": "module",
-  "main": "index.js",
+  "main": "./index.js",
   "scripts": {
-    "start": "node --experimental-modules cli.mjs",
-    "test": "node --experimental-modules test.mjs"
+    "start": "node --experimental-modules cli.js",
+    "build": "webpack",
+    "watch": "webpack --watch --mode development",
+    "test": "node --experimental-modules test.js"
   },
   "author": "hlorenzi",
   "license": "ISC",
   "bin": {
-    "fontx": "cli.mjs"
+    "font": "cli.js"
   },
   "dependencies": {
-    "@hlorenzi/buffer": "^1.1.0",
+    "@hlorenzi/buffer": "^1.2.0",
     "minimist": "^1.2.0",
-    "pngjs": "^3.3.3"
+    "pngjs": "^3.3.3",
+    "webpack": "^4.36.1",
+    "webpack-cli": "^3.3.6"
   }
 }

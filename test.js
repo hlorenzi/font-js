@@ -1,4 +1,4 @@
-import { FontCollection, GlyphRenderer } from "./index"
+import { FontCollection, GlyphRenderer } from "./index.js"
 import fs from "fs"
 import assert from "assert"
 
@@ -26,7 +26,7 @@ console.log("")
 
 glyphImage.normalizeColorRange()
 
-assert.deepEqual(glyphImage.buffer,
+assert.deepEqual([...glyphImage.buffer],
 [
 	78, 209, 239, 242, 216, 74,
 	198, 199, 28, 52, 224, 172,

@@ -1,6 +1,3 @@
-#!/usr/bin/env node --experimental-modules
-
-
 import { FontCollection, Font, GlyphRenderer } from "./index.js"
 import { parseGlyphRange } from "./src/glyphRangeParser.js"
 import fs from "fs"
@@ -9,8 +6,8 @@ import PNG from "pngjs"
 import path from "path"
 
 
-import PackageJson from "./package.json"
-console.log(PackageJson.name + " v" + PackageJson.version)
+//import PackageJson from "./package.json"
+//console.log(PackageJson.name + " v" + PackageJson.version)
 
 
 const usage =
@@ -109,6 +106,9 @@ Options:
 		
 	--ignore-img-metrics
 		Force use normalized EM units in the data output, disregarding any rendered images.
+		
+	--ignore-existing
+		Skips over glyphs which already have a corresponding file in the output location.
 `
 
 const exitWithUsage = () =>
@@ -135,6 +135,7 @@ const argUseAlpha = !!opts["use-alpha"]
 const argGamma = parseFloat(opts.gamma) || 2.2
 const argCurvePrecision = parseInt(opts["curve-precision"]) || 100
 const argIgnoreImgMetrics = !!opts["ignore-img-metrics"]
+const argIgnoreExisting = !!opts["ignore-existing"]
 
 const argSDFMin = parseFloat(opts["sdf-min"])
 const argSDFMax = parseFloat(opts["sdf-max"])
@@ -216,7 +217,32 @@ for (const glyphId of argGlyphList.glyphIds)
 // Render glyphs.
 for (const glyph of resolvedGlyphList)
 {
-	console.log("extracting glyph #" + glyph.glyphId + ": [" + glyph.unicodeCodepoints.map(c => "U+" + c.toString(16)).join(",") + "]...")
+	const mainUnicodeCodepoint = (glyph.unicodeCodepoints.length == 0 ? null : glyph.unicodeCodepoints[0])
+		
+	const outputImgFilename = argImgOut
+		.replace(/\[glyphid\]/g, glyph.glyphId.toString())
+		.replace(/\[unicode\]/g, (glyph.unicodeCodepoints.length == 0 ? "" : glyph.unicodeCodepoints[0].toString(16)))
+		
+	const outputDataFilename = argDataOut
+		.replace(/\[glyphid\]/g, glyph.glyphId.toString())
+		.replace(/\[unicode\]/g, mainUnicodeCodepoint == null ? "" : mainUnicodeCodepoint.toString(16))
+		
+	let shouldSkip = false
+	if (argIgnoreExisting)
+	{
+		if (argImgMode != "none" && fs.existsSync(outputImgFilename))
+			shouldSkip = true
+		
+		if (argDataMode == "json" && fs.existsSync(outputDataFilename + ".json"))
+			shouldSkip = true
+		
+		if (argDataMode == "xml-sprsheet" && fs.existsSync(outputDataFilename + ".sprsheet"))
+			shouldSkip = true
+	}
+	
+	console.log((shouldSkip ? "skipping" : "extracting") + " glyph #" + glyph.glyphId + ": [" + glyph.unicodeCodepoints.map(c => "U+" + c.toString(16)).join(",") + "]...")
+	if (shouldSkip)
+		continue
 	
 	let renderedImage = null
 	if (argImgMode != "none")
@@ -270,11 +296,7 @@ for (const glyph of resolvedGlyphList)
 			}
 		}
 		
-		const outputFilename = argImgOut
-			.replace(/\[glyphid\]/g, glyph.glyphId.toString())
-			.replace(/\[unicode\]/g, (glyph.unicodeCodepoints.length == 0 ? "" : glyph.unicodeCodepoints[0].toString(16)))
-			
-		fs.writeFileSync(outputFilename + ".png", PNG.PNG.sync.write(png))
+		fs.writeFileSync(outputImgFilename + ".png", PNG.PNG.sync.write(png))
 	}
 	
 	if (argDataMode != "none")
@@ -318,20 +340,14 @@ for (const glyph of resolvedGlyphList)
 		if (argDataMode != "json")
 			json.contours = geometry.contours
 		
-		const mainUnicodeCodepoint = (glyph.unicodeCodepoints.length == 0 ? null : glyph.unicodeCodepoints[0])
-		
-		const outputFilename = argDataOut
-			.replace(/\[glyphid\]/g, glyph.glyphId.toString())
-			.replace(/\[unicode\]/g, mainUnicodeCodepoint == null ? "" : mainUnicodeCodepoint.toString(16))
-			
 		if (argDataMode != "xml-sprsheet")
 		{			
 			const jsonStr = JSON.stringify(json, null, 4)
-			fs.writeFileSync(outputFilename + ".json", jsonStr)
+			fs.writeFileSync(outputDataFilename + ".json", jsonStr)
 		}
 		else
 		{
-			const filenameWithoutFolder = path.basename(outputFilename + ".png")
+			const filenameWithoutFolder = path.basename(outputDataFilename + ".png")
 			const xml =
 				`<sprite-sheet src="` + filenameWithoutFolder + `">
 					<sprite name="` + mainUnicodeCodepoint.toString(16) + `" x="0" y="0" width="` + metrics.width + `" height="` + metrics.height + `">
@@ -340,7 +356,7 @@ for (const glyph of resolvedGlyphList)
 					</sprite>
 				</sprite-sheet>`
 
-			fs.writeFileSync(outputFilename + ".sprsheet", xml)
+			fs.writeFileSync(outputDataFilename + ".sprsheet", xml)
 		}
 	}
 }

@@ -18,7 +18,7 @@
   "scripts": {
     "start": "node cli.js",
     "build": "webpack",
-    "watch": "webpack --watch --mode development",
+    "dev": "webpack --watch --mode development",
     "test": "node test.js"
   },
   "author": "hlorenzi",
@@ -28,11 +28,11 @@
   },
   "dependencies": {
     "@hlorenzi/buffer": "^1.2.0",
-    "minimist": "^1.2.0",
-    "pngjs": "^3.3.3"
+    "minimist": "^1.2.8",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
-    "webpack": "^4.36.1",
-    "webpack-cli": "^3.3.6"
+    "webpack": "^5.105.4",
+    "webpack-cli": "^6.0.1"
   }
 }

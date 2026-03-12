@@ -12,6 +12,6 @@ module.exports =
 	output:
 	{
 		filename: "[name].js",
-		path: path.resolve(__dirname, "webpack")
+		path: path.resolve(__dirname, ".build")
 	}
 }

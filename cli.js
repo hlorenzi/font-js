@@ -349,29 +349,30 @@ for (const glyph of resolvedGlyphList)
 			const filenameWithoutFolder = path.basename(outputDataFilename + ".png")
 			const json =
 `{
-	sprites:
+	"sprites":
 	[
 		{
-			id: "${mainUnicodeCodepoint.toString(16)}",
-			src: "${filenameWithoutFolder}",
-			x: 0,
-			y: 0,
-			w: ${metrics.width},
-			h: ${metrics.height},
-			trim_x: 0,
-			trim_y: 0,
-			trim_w: 0,
-			trim_h: 0,
-			properties:
-			[
-				unicode: ${mainUnicodeCodepoint},
-				xPivot: ${Math.floor(metrics.xOrigin)},
-				yPivot: ${Math.floor(metrics.yOrigin)},
-				advance: ${Math.floor(metrics.xAdvance)},
-				ascender: ${Math.floor(lineMetrics.lineTop * metrics.emToPixels)},
-				descender: ${Math.floor(lineMetrics.lineBottom * metrics.emToPixels)},
-				lineGap: ${Math.floor(lineMetrics.lineGap * metrics.emToPixels)}
-			]
+			"id": "${mainUnicodeCodepoint.toString(16)}",
+			"src": "${filenameWithoutFolder}",
+			"x": 0,
+			"y": 0,
+			"w": ${metrics.width},
+			"h": ${metrics.height},
+			"trim_x": 0,
+			"trim_y": 0,
+			"trim_w": 0,
+			"trim_h": 0,
+			"properties":
+			{
+				"unicode": ${mainUnicodeCodepoint},
+				"xPivot": ${metrics.xOrigin},
+				"yPivot": ${metrics.yOrigin},
+				"emToPixels": ${metrics.emToPixels},
+				"advance": ${metrics.xAdvance},
+				"ascender": ${lineMetrics.lineTop * metrics.emToPixels},
+				"descender": ${lineMetrics.lineBottom * metrics.emToPixels},
+				"lineGap": ${lineMetrics.lineGap * metrics.emToPixels}
+			}
 		}
 	]
 }`

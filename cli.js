@@ -214,6 +214,8 @@ for (const glyphId of argGlyphList.glyphIds)
 	}
 }
 
+const lineMetrics = font.getHorizontalLineMetrics()
+
 // Render glyphs.
 for (const glyph of resolvedGlyphList)
 {
@@ -314,6 +316,8 @@ for (const glyph of resolvedGlyphList)
 			height: geometry.yMax - geometry.yMin,
 			xOrigin: 0,
 			yOrigin: 0,
+			metricsY1: lineMetrics.lineTop,
+			metricsY2: lineMetrics.lineBottom,
 			xAdvance: geometry.advance,
 			emToPixels: null,
 		}
@@ -340,12 +344,41 @@ for (const glyph of resolvedGlyphList)
 		if (argDataMode != "json")
 			json.contours = geometry.contours
 		
-		if (argDataMode != "xml-sprsheet")
-		{			
-			const jsonStr = JSON.stringify(json, null, 4)
-			fs.writeFileSync(outputDataFilename + ".json", jsonStr)
+		if (argDataMode === "json-sprsheet")
+		{
+			const filenameWithoutFolder = path.basename(outputDataFilename + ".png")
+			const json =
+`{
+	sprites:
+	[
+		{
+			id: "${mainUnicodeCodepoint.toString(16)}",
+			src: "${filenameWithoutFolder}",
+			x: 0,
+			y: 0,
+			w: ${metrics.width},
+			h: ${metrics.height},
+			trim_x: 0,
+			trim_y: 0,
+			trim_w: 0,
+			trim_h: 0,
+			properties:
+			[
+				unicode: ${mainUnicodeCodepoint},
+				xPivot: ${Math.floor(metrics.xOrigin)},
+				yPivot: ${Math.floor(metrics.yOrigin)},
+				advance: ${Math.floor(metrics.xAdvance)},
+				ascender: ${Math.floor(lineMetrics.lineTop * metrics.emToPixels)},
+				descender: ${Math.floor(lineMetrics.lineBottom * metrics.emToPixels)},
+				lineGap: ${Math.floor(lineMetrics.lineGap * metrics.emToPixels)}
+			]
 		}
-		else
+	]
+}`
+
+			fs.writeFileSync(outputDataFilename + ".json", json)
+		}
+		else if (argDataMode === "xml-sprsheet")
 		{
 			const filenameWithoutFolder = path.basename(outputDataFilename + ".png")
 			const xml =
@@ -357,6 +390,11 @@ for (const glyph of resolvedGlyphList)
 				</sprite-sheet>`
 
 			fs.writeFileSync(outputDataFilename + ".sprsheet", xml)
+		}
+		else
+		{			
+			const jsonStr = JSON.stringify(json, null, 4)
+			fs.writeFileSync(outputDataFilename + ".json", jsonStr)
 		}
 	}
 }
